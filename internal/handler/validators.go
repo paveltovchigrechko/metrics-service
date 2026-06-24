@@ -16,11 +16,11 @@ func validateReqPath(req *http.Request) error {
 	pathParts := strings.Split(path, "/")
 	// Expect /update/<metric_type>/<metric_name>/<metric_value> path in the request.
 	if len(pathParts) != 5 {
-		return errors.New("Invalid path: update/<metric_type>/<metric_name>/<metric_value> is expected")
+		return errors.New("Invalid path")
 	}
 
 	if strings.Compare(pathParts[1], "update") != 0 {
-		return errors.New("Invalid route: expected `update`")
+		return errors.New("Invalid endpoint")
 	}
 
 	metricType := pathParts[2]
