@@ -31,12 +31,11 @@ func (h *AppHandler) MainPage(w http.ResponseWriter, req *http.Request) {
 		switch err.Error() {
 		case "No metric":
 			w.WriteHeader(http.StatusNotFound)
-		case "Invalid metric value", "Invalid metric name":
+		case "Invalid metric value", "Invalid metric name", "Invalid endpoint":
 			w.WriteHeader(http.StatusBadRequest)
 		case "Invalid path":
 			w.WriteHeader(http.StatusNotFound)
-		case "Invalid endpoint":
-			break
+
 		}
 		w.Write([]byte(err.Error())) // Delete
 		return
