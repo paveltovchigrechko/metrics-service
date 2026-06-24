@@ -26,7 +26,7 @@ func validateReqPath(req *http.Request) error {
 	metricType := pathParts[2]
 
 	if strings.Compare(metricType, models.Counter) != 0 && strings.Compare(metricType, models.Gauge) != 0 {
-		return errors.New("Invalid metric name")
+		return errors.New("Invalid metric type")
 	}
 
 	if strings.Compare(metricType, models.Counter) == 0 { // Expect int64 value for this type.
@@ -45,7 +45,7 @@ func validateReqPath(req *http.Request) error {
 
 	metricName := pathParts[3]
 	if len(metricName) == 0 { // Expect to have metric name.
-		return errors.New("No metric")
+		return errors.New("No metric name")
 	}
 
 	return nil

@@ -29,13 +29,10 @@ func (h *AppHandler) MainPage(w http.ResponseWriter, req *http.Request) {
 
 	if err := validateReqPath(req); err != nil {
 		switch err.Error() {
-		case "No metric":
+		case "No metric", "Invalid path":
 			w.WriteHeader(http.StatusNotFound)
-		case "Invalid metric value", "Invalid metric name", "Invalid endpoint":
+		case "Invalid metric value", "Invalid metric type", "Invalid endpoint", "No metric name":
 			w.WriteHeader(http.StatusBadRequest)
-		case "Invalid path":
-			w.WriteHeader(http.StatusNotFound)
-
 		}
 		w.Write([]byte(err.Error())) // Delete
 		return
