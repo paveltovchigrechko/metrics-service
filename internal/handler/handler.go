@@ -65,8 +65,6 @@ func parseMetricAndName(url *url.URL) (*models.Metrics, string) {
 	m := models.Metrics{
 		MType: metricType,
 	}
-
-	// TODO: Remove duplicate logic with validateReqPath().
 	if metricType == models.Counter {
 		value, _ := strconv.ParseInt(metricValue, 10, 64) // Process error.
 		m.Delta = &value

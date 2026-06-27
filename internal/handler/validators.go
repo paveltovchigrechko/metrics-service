@@ -10,10 +10,6 @@ import (
 	models "github.com/paveltovchigrechko/metrics-service/internal/model"
 )
 
-const (
-	endpoint = "update"
-)
-
 func validateReqPath(req *http.Request) error {
 	path := req.URL.RequestURI()
 
@@ -23,7 +19,7 @@ func validateReqPath(req *http.Request) error {
 		return errors.New("Invalid path")
 	}
 
-	if strings.Compare(pathParts[1], endpoint) != 0 {
+	if strings.Compare(pathParts[1], "update") != 0 {
 		return errors.New("Invalid endpoint")
 	}
 

@@ -1,9 +1,5 @@
 package models
 
-import (
-	"errors"
-)
-
 const (
 	Counter = "counter"
 	Gauge   = "gauge"
@@ -20,19 +16,4 @@ type Metrics struct {
 	Delta *int64   `json:"delta,omitempty"`
 	Value *float64 `json:"value,omitempty"`
 	Hash  string   `json:"hash,omitempty"`
-}
-
-func CreateMetrics(mtype string, delta int64, value float64) (*Metrics, error) {
-	m := &Metrics{}
-
-	switch mtype {
-	case Counter:
-		m.Delta = &delta
-	case Gauge:
-		m.Value = &value
-	default:
-		return nil, errors.New("Incorrect metrics type")
-	}
-
-	return m, nil
 }
