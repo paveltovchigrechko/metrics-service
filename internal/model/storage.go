@@ -10,12 +10,12 @@ func NewStorage() *MemStorage {
 	}
 }
 
-func (ms *MemStorage) UpdateMetric(m *Metrics, name string) {
+func (ms *MemStorage) UpdateMetric(m *Metrics) {
 	switch m.MType {
 	case Counter:
-		newValue := *ms.Metrics[name].Delta + *m.Delta
-		ms.Metrics[name].Delta = &newValue
+		newValue := *ms.Metrics[m.ID].Delta + *m.Delta
+		ms.Metrics[m.ID].Delta = &newValue
 	case Gauge:
-		ms.Metrics[name].Value = m.Value
+		ms.Metrics[m.ID].Value = m.Value
 	}
 }

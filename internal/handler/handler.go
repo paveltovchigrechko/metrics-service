@@ -22,6 +22,7 @@ func NewHandler(s *models.MemStorage) *AppHandler {
 }
 
 func (h *AppHandler) MainPage(w http.ResponseWriter, req *http.Request) {
+	// log.Printf("Received: %s", req.URL.Path)
 	if err := validateReqHeader(req); err != nil {
 		w.Write([]byte(err.Error())) // Delete
 		return
@@ -39,30 +40,31 @@ func (h *AppHandler) MainPage(w http.ResponseWriter, req *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusOK)
-
-	h.processMetric(req.URL)
+	h.processMetrics(req.URL)
 }
 
-func (h *AppHandler) processMetric(url *url.URL) {
+func (h *AppHandler) processMetrics(url *url.URL) {
 	// Parse metric and its value. We know the metric has a name, a correct type, and value.
-	metric, metricName := parseMetricAndName(url)
+	metric := parseMetrics(url)
 
 	// Check if the metric is new or already exists.
-	if _, ok := h.storage.Metrics[metricName]; !ok {
+	if _, ok := h.storage.Metrics[metric.ID]; !ok {
 		// Add new metric.
-		h.storage.Metrics[metricName] = metric
+		h.storage.Metrics[metric.ID] = metric
 	} else {
 		// Update existing metric.
-		h.storage.UpdateMetric(metric, metricName)
+		h.storage.UpdateMetric(metric)
 	}
 }
 
-func parseMetricAndName(url *url.URL) (*models.Metrics, string) {
+// This function assumes the input url.Url passed validateReqPath().
+func parseMetrics(url *url.URL) *models.Metrics {
 	path := url.RequestURI()
 
 	pathParts := strings.Split(path, "/")
 	metricType, metricName, metricValue := pathParts[2], pathParts[3], pathParts[4]
 	m := models.Metrics{
+		ID:    metricName,
 		MType: metricType,
 	}
 
@@ -75,5 +77,5 @@ func parseMetricAndName(url *url.URL) (*models.Metrics, string) {
 		m.Value = &value
 	}
 
-	return &m, metricName
+	return &m
 }

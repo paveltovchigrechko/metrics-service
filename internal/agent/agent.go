@@ -2,6 +2,7 @@ package agent
 
 import (
 	"fmt"
+	"log"
 	"math"
 	"math/rand"
 	"net/http"
@@ -56,8 +57,10 @@ type Agent struct {
 func NewAgent() *Agent {
 	m := new(runtime.MemStats)
 	return &Agent{
-		m:           m,
-		client:      &http.Client{},
+		m: m,
+		client: &http.Client{
+			Timeout: 2 * time.Second,
+		},
 		PollCount:   0,
 		RandomValue: calcNewRandomValue(),
 	}
@@ -71,7 +74,10 @@ func (a *Agent) Run() {
 		// Check if 10 seconds elapsed
 		if a.PollCount%5 == 0 {
 			metrics := a.buildMetrics()
-			a.SendMetrics(metrics)
+			err := a.SendMetrics(metrics)
+			if err != nil {
+				log.Print(err)
+			}
 		}
 		time.Sleep(pollInterval)
 	}
@@ -356,17 +362,18 @@ func (a *Agent) buildMetrics() []*models.Metrics {
 		m.ID = md.Name
 		result = append(result, m)
 	}
-
 	return result
 }
 
 func (a *Agent) SendMetrics(metrics []*models.Metrics) error {
 	for _, m := range metrics {
 		url := createURLFromMetric(m)
-		_, err := a.client.Post(url, contentType, nil)
+		resp, err := a.client.Post(url, contentType, nil)
 		if err != nil {
 			return err
 		}
+
+		resp.Body.Close()
 	}
 
 	return nil
@@ -376,9 +383,10 @@ func createURLFromMetric(m *models.Metrics) string {
 	var url string
 	switch m.MType {
 	case models.Counter:
-		url = fmt.Sprintf("%s/update/%s/%s/%v", host, m.MType, m.ID, *m.Delta)
+		url = fmt.Sprintf("%s/update/%s/%s/%d", host, m.MType, m.ID, *m.Delta)
 	case models.Gauge:
-		url = fmt.Sprintf("%s/update/%s/%s/%v", host, m.MType, m.ID, *m.Value)
+		url = fmt.Sprintf("%s/update/%s/%s/%.2f", host, m.MType, m.ID, *m.Value)
+	default:
 	}
 
 	return url

@@ -22,8 +22,10 @@ type Metrics struct {
 	Hash  string   `json:"hash,omitempty"`
 }
 
-func CreateMetrics(mtype string, delta int64, value float64) (*Metrics, error) {
+func CreateMetrics(name, mtype string, delta int64, value float64) (*Metrics, error) {
 	m := &Metrics{}
+	m.ID = name
+	m.MType = mtype
 
 	switch mtype {
 	case Counter:
