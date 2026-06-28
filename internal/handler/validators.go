@@ -74,7 +74,7 @@ var reqHeaderValidators = []requestValidator{
 
 func validateReqMethod(req *http.Request) error {
 	if req.Method != http.MethodPost {
-		return errors.New("Only POST requests are allowed")
+		return errors.New("Invalid request method")
 	}
 
 	return nil

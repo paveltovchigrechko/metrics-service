@@ -1,6 +1,8 @@
 package handler
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"testing"
 
@@ -17,7 +19,104 @@ func TestNewHandler(t *testing.T) {
 }
 
 func TestMainPage(t *testing.T) {
+	type want struct {
+		code        int
+		contentType string
+	}
+	tests := []struct {
+		name     string
+		method   string
+		target   string
+		headers  map[string]string
+		wantCode int
+		wantType string
+	}{
+		{
+			name:     "positive test #1 (valid gauge)",
+			method:   http.MethodPost,
+			target:   "/update/gauge/Alloc/1024.50",
+			headers:  map[string]string{"Content-Type": "text/plain"},
+			wantCode: http.StatusOK,
+			wantType: "",
+		},
+		{
+			name:     "negative test - unsupported endpoint",
+			method:   http.MethodPost,
+			target:   "/server-updates/gauge/Alloc/1024.50",
+			headers:  map[string]string{"Content-Type": "text/plain"},
+			wantCode: http.StatusBadRequest,
+			wantType: "",
+		},
+		{
+			name:     "negative test - unsupported method",
+			method:   http.MethodGet,
+			target:   "/update/gauge/Alloc/1024.50",
+			headers:  map[string]string{"Content-Type": "text/plain"},
+			wantCode: http.StatusBadRequest,
+			wantType: "",
+		},
+		{
+			name:     "negative test - missing content type",
+			method:   http.MethodPost,
+			target:   "/update/gauge/Alloc/1024.50",
+			headers:  map[string]string{}, // Empty headers
+			wantCode: http.StatusBadRequest,
+			wantType: "",
+		},
+		{
+			name:     "negative test - 400 no metric",
+			method:   http.MethodPost,
+			target:   "/update/gauge/",
+			headers:  map[string]string{"Content-Type": "text/plain"},
+			wantCode: http.StatusNotFound,
+			wantType: "",
+		},
+		{
+			name:     "negative test - 400 invalid metric value",
+			method:   http.MethodPost,
+			target:   "/update/gauge/Alloc/abc",
+			headers:  map[string]string{"Content-Type": "text/plain"},
+			wantCode: http.StatusBadRequest,
+			wantType: "",
+		},
+		{
+			name:     "negative test - 404 invalid metric type",
+			method:   http.MethodPost,
+			target:   "/update/unknown-type/Alloc/100",
+			headers:  map[string]string{"Content-Type": "text/plain"},
+			wantCode: http.StatusBadRequest,
+			wantType: "",
+		},
+	}
 
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			// 1. Pass the test case's specific HTTP method and target URL path string
+			request := httptest.NewRequest(test.method, test.target, nil)
+
+			// 2. Inject the custom headers for this test case
+			for key, value := range test.headers {
+				request.Header.Set(key, value)
+			}
+
+			w := httptest.NewRecorder()
+			s := models.NewStorage()
+			h := NewHandler(s)
+
+			h.MainPage(w, request)
+
+			res := w.Result()
+			defer res.Body.Close()
+
+			// 3. Verify the status code matches what we expect
+			assert.Equal(t, test.wantCode, res.StatusCode)
+
+			// 4. Only verify content-type header on successful responses
+			if test.wantCode == http.StatusOK {
+				assert.Equal(t, test.wantType, res.Header.Get("Content-Type"))
+			}
+		})
+	}
 }
 
 func TestProcessMetrics(t *testing.T) {

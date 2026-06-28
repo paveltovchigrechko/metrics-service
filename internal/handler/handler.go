@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"log"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -22,9 +23,10 @@ func NewHandler(s *models.MemStorage) *AppHandler {
 }
 
 func (h *AppHandler) MainPage(w http.ResponseWriter, req *http.Request) {
-	// log.Printf("Received: %s", req.URL.Path)
+	// log.Printf("[DEBUG] Received request: %s", req.URL.Path) // Delete
 	if err := validateReqHeader(req); err != nil {
-		w.Write([]byte(err.Error())) // Delete
+		w.WriteHeader(http.StatusBadRequest)
+		log.Printf("[DEBUG] Header validation failed: %v", err) // Delete
 		return
 	}
 
@@ -35,7 +37,7 @@ func (h *AppHandler) MainPage(w http.ResponseWriter, req *http.Request) {
 		case "Invalid metric value", "Invalid metric type", "Invalid endpoint", "No metric name":
 			w.WriteHeader(http.StatusBadRequest)
 		}
-		w.Write([]byte(err.Error())) // Delete
+		log.Printf("[DEBUG] Path validation failed: %v", err) // Delete
 		return
 	}
 

@@ -126,7 +126,7 @@ var metricsRegistry = []MetricDescriptor{
 		Name: "Alloc",
 		Get: func(a *Agent) *models.Metrics {
 			value := float64(a.Alloc)
-			m, _ := models.CreateMetrics(models.Gauge, 0, value)
+			m, _ := models.CreateMetrics("Alloc", models.Gauge, 0, value)
 			return m
 		},
 	},
@@ -134,7 +134,7 @@ var metricsRegistry = []MetricDescriptor{
 		Name: "BuckHashSys",
 		Get: func(a *Agent) *models.Metrics {
 			value := float64(a.BuckHashSys)
-			m, _ := models.CreateMetrics(models.Gauge, 0, value)
+			m, _ := models.CreateMetrics("BuckHashSys", models.Gauge, 0, value)
 			return m
 		},
 	},
@@ -142,7 +142,7 @@ var metricsRegistry = []MetricDescriptor{
 		Name: "Frees",
 		Get: func(a *Agent) *models.Metrics {
 			value := float64(a.Frees)
-			m, _ := models.CreateMetrics(models.Gauge, 0, value)
+			m, _ := models.CreateMetrics("Frees", models.Gauge, 0, value)
 			return m
 		},
 	},
@@ -150,7 +150,7 @@ var metricsRegistry = []MetricDescriptor{
 		Name: "GCCPUFraction",
 		Get: func(a *Agent) *models.Metrics {
 			value := a.GCCPUFraction
-			m, _ := models.CreateMetrics(models.Gauge, 0, value)
+			m, _ := models.CreateMetrics("GCCPUFraction", models.Gauge, 0, value)
 			return m
 		},
 	},
@@ -158,7 +158,7 @@ var metricsRegistry = []MetricDescriptor{
 		Name: "GCSys",
 		Get: func(a *Agent) *models.Metrics {
 			value := float64(a.GCSys)
-			m, _ := models.CreateMetrics(models.Gauge, 0, value)
+			m, _ := models.CreateMetrics("GCSys", models.Gauge, 0, value)
 			return m
 		},
 	},
@@ -166,7 +166,7 @@ var metricsRegistry = []MetricDescriptor{
 		Name: "HeapAlloc",
 		Get: func(a *Agent) *models.Metrics {
 			value := float64(a.HeapAlloc)
-			m, _ := models.CreateMetrics(models.Gauge, 0, value)
+			m, _ := models.CreateMetrics("HeapAlloc", models.Gauge, 0, value)
 			return m
 		},
 	},
@@ -174,7 +174,7 @@ var metricsRegistry = []MetricDescriptor{
 		Name: "HeapIdle",
 		Get: func(a *Agent) *models.Metrics {
 			value := float64(a.HeapIdle)
-			m, _ := models.CreateMetrics(models.Gauge, 0, value)
+			m, _ := models.CreateMetrics("HeapIdle", models.Gauge, 0, value)
 			return m
 		},
 	},
@@ -182,7 +182,7 @@ var metricsRegistry = []MetricDescriptor{
 		Name: "HeapInuse",
 		Get: func(a *Agent) *models.Metrics {
 			value := float64(a.HeapInuse)
-			m, _ := models.CreateMetrics(models.Gauge, 0, value)
+			m, _ := models.CreateMetrics("HeapInuse", models.Gauge, 0, value)
 			return m
 		},
 	},
@@ -190,7 +190,7 @@ var metricsRegistry = []MetricDescriptor{
 		Name: "HeapObjects",
 		Get: func(a *Agent) *models.Metrics {
 			value := float64(a.HeapObjects)
-			m, _ := models.CreateMetrics(models.Gauge, 0, value)
+			m, _ := models.CreateMetrics("HeapObjects", models.Gauge, 0, value)
 			return m
 		},
 	},
@@ -198,7 +198,7 @@ var metricsRegistry = []MetricDescriptor{
 		Name: "HeapReleased",
 		Get: func(a *Agent) *models.Metrics {
 			value := float64(a.HeapReleased)
-			m, _ := models.CreateMetrics(models.Gauge, 0, value)
+			m, _ := models.CreateMetrics("HeapReleased", models.Gauge, 0, value)
 			return m
 		},
 	},
@@ -206,7 +206,7 @@ var metricsRegistry = []MetricDescriptor{
 		Name: "HeapSys",
 		Get: func(a *Agent) *models.Metrics {
 			value := float64(a.HeapSys)
-			m, _ := models.CreateMetrics(models.Gauge, 0, value)
+			m, _ := models.CreateMetrics("HeapSys", models.Gauge, 0, value)
 			return m
 		},
 	},
@@ -214,7 +214,7 @@ var metricsRegistry = []MetricDescriptor{
 		Name: "LastGC",
 		Get: func(a *Agent) *models.Metrics {
 			value := float64(a.LastGC)
-			m, _ := models.CreateMetrics(models.Gauge, 0, value)
+			m, _ := models.CreateMetrics("LastGC", models.Gauge, 0, value)
 			return m
 		},
 	},
@@ -222,7 +222,7 @@ var metricsRegistry = []MetricDescriptor{
 		Name: "Lookups",
 		Get: func(a *Agent) *models.Metrics {
 			value := float64(a.Lookups)
-			m, _ := models.CreateMetrics(models.Gauge, 0, value)
+			m, _ := models.CreateMetrics("Lookups", models.Gauge, 0, value)
 			return m
 		},
 	},
@@ -230,7 +230,7 @@ var metricsRegistry = []MetricDescriptor{
 		Name: "Mallocs",
 		Get: func(a *Agent) *models.Metrics {
 			value := float64(a.Mallocs)
-			m, _ := models.CreateMetrics(models.Gauge, 0, value)
+			m, _ := models.CreateMetrics("Mallocs", models.Gauge, 0, value)
 			return m
 		},
 	},
@@ -238,7 +238,7 @@ var metricsRegistry = []MetricDescriptor{
 		Name: "MCacheInuse",
 		Get: func(a *Agent) *models.Metrics {
 			value := float64(a.MCacheInuse)
-			m, _ := models.CreateMetrics(models.Gauge, 0, value)
+			m, _ := models.CreateMetrics("MCacheInuse", models.Gauge, 0, value)
 			return m
 		},
 	},
@@ -246,7 +246,7 @@ var metricsRegistry = []MetricDescriptor{
 		Name: "MCacheSys",
 		Get: func(a *Agent) *models.Metrics {
 			value := float64(a.MCacheSys)
-			m, _ := models.CreateMetrics(models.Gauge, 0, value)
+			m, _ := models.CreateMetrics("MCacheSys", models.Gauge, 0, value)
 			return m
 		},
 	},
@@ -254,7 +254,7 @@ var metricsRegistry = []MetricDescriptor{
 		Name: "MSpanInuse",
 		Get: func(a *Agent) *models.Metrics {
 			value := float64(a.MSpanInuse)
-			m, _ := models.CreateMetrics(models.Gauge, 0, value)
+			m, _ := models.CreateMetrics("MSpanInuse", models.Gauge, 0, value)
 			return m
 		},
 	},
@@ -262,7 +262,7 @@ var metricsRegistry = []MetricDescriptor{
 		Name: "MSpanSys",
 		Get: func(a *Agent) *models.Metrics {
 			value := float64(a.MSpanSys)
-			m, _ := models.CreateMetrics(models.Gauge, 0, value)
+			m, _ := models.CreateMetrics("MSpanSys", models.Gauge, 0, value)
 			return m
 		},
 	},
@@ -270,7 +270,7 @@ var metricsRegistry = []MetricDescriptor{
 		Name: "NextGC",
 		Get: func(a *Agent) *models.Metrics {
 			value := float64(a.NextGC)
-			m, _ := models.CreateMetrics(models.Gauge, 0, value)
+			m, _ := models.CreateMetrics("NextGC", models.Gauge, 0, value)
 			return m
 		},
 	},
@@ -278,7 +278,7 @@ var metricsRegistry = []MetricDescriptor{
 		Name: "NumForcedGC",
 		Get: func(a *Agent) *models.Metrics {
 			value := float64(a.NumForcedGC)
-			m, _ := models.CreateMetrics(models.Gauge, 0, value)
+			m, _ := models.CreateMetrics("NumForcedGC", models.Gauge, 0, value)
 			return m
 		},
 	},
@@ -286,7 +286,7 @@ var metricsRegistry = []MetricDescriptor{
 		Name: "NumGC",
 		Get: func(a *Agent) *models.Metrics {
 			value := float64(a.NumGC)
-			m, _ := models.CreateMetrics(models.Gauge, 0, value)
+			m, _ := models.CreateMetrics("NumGC", models.Gauge, 0, value)
 			return m
 		},
 	},
@@ -294,7 +294,7 @@ var metricsRegistry = []MetricDescriptor{
 		Name: "OtherSys",
 		Get: func(a *Agent) *models.Metrics {
 			value := float64(a.OtherSys)
-			m, _ := models.CreateMetrics(models.Gauge, 0, value)
+			m, _ := models.CreateMetrics("OtherSys", models.Gauge, 0, value)
 			return m
 		},
 	},
@@ -302,7 +302,7 @@ var metricsRegistry = []MetricDescriptor{
 		Name: "PauseTotalNs",
 		Get: func(a *Agent) *models.Metrics {
 			value := float64(a.PauseTotalNs)
-			m, _ := models.CreateMetrics(models.Gauge, 0, value)
+			m, _ := models.CreateMetrics("PauseTotalNs", models.Gauge, 0, value)
 			return m
 		},
 	},
@@ -310,7 +310,7 @@ var metricsRegistry = []MetricDescriptor{
 		Name: "StackInuse",
 		Get: func(a *Agent) *models.Metrics {
 			value := float64(a.StackInuse)
-			m, _ := models.CreateMetrics(models.Gauge, 0, value)
+			m, _ := models.CreateMetrics("StackInuse", models.Gauge, 0, value)
 			return m
 		},
 	},
@@ -318,7 +318,7 @@ var metricsRegistry = []MetricDescriptor{
 		Name: "StackSys",
 		Get: func(a *Agent) *models.Metrics {
 			value := float64(a.StackSys)
-			m, _ := models.CreateMetrics(models.Gauge, 0, value)
+			m, _ := models.CreateMetrics("StackSys", models.Gauge, 0, value)
 			return m
 		},
 	},
@@ -326,7 +326,7 @@ var metricsRegistry = []MetricDescriptor{
 		Name: "Sys",
 		Get: func(a *Agent) *models.Metrics {
 			value := float64(a.Sys)
-			m, _ := models.CreateMetrics(models.Gauge, 0, value)
+			m, _ := models.CreateMetrics("Sys", models.Gauge, 0, value)
 			return m
 		},
 	},
@@ -334,21 +334,21 @@ var metricsRegistry = []MetricDescriptor{
 		Name: "TotalAlloc",
 		Get: func(a *Agent) *models.Metrics {
 			value := float64(a.TotalAlloc)
-			m, _ := models.CreateMetrics(models.Gauge, 0, value)
+			m, _ := models.CreateMetrics("TotalAlloc", models.Gauge, 0, value)
 			return m
 		},
 	},
 	{
 		Name: "PollCount",
 		Get: func(a *Agent) *models.Metrics {
-			m, _ := models.CreateMetrics(models.Counter, a.PollCount, 0)
+			m, _ := models.CreateMetrics("PollCount", models.Counter, a.PollCount, 0)
 			return m
 		},
 	},
 	{
 		Name: "RandomValue",
 		Get: func(a *Agent) *models.Metrics {
-			m, _ := models.CreateMetrics(models.Gauge, 0, a.RandomValue)
+			m, _ := models.CreateMetrics("RandomValue", models.Gauge, 0, a.RandomValue)
 			return m
 		},
 	},
