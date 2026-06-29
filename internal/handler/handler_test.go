@@ -80,11 +80,11 @@ func TestMainPage(t *testing.T) {
 			wantType: "",
 		},
 		{
-			name:     "negative test - 404 invalid metric type",
+			name:     "negative test - 400 invalid metric type",
 			method:   http.MethodPost,
 			target:   "/update/unknown-type/Alloc/100",
 			headers:  map[string]string{"Content-Type": "text/plain"},
-			wantCode: http.StatusNotFound,
+			wantCode: http.StatusBadRequest,
 			wantType: "",
 		},
 	}

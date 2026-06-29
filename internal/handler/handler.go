@@ -32,7 +32,7 @@ func (h *AppHandler) MainPage(w http.ResponseWriter, req *http.Request) {
 
 	if err := validateReqPath(req); err != nil {
 		switch err {
-		case ErrInvalidMetricsType, ErrInvalidPath:
+		case ErrInvalidPath:
 			w.WriteHeader(http.StatusNotFound)
 		case ErrInvalidMetricsValue, ErrInvalidMetricsType, ErrInvalidEndpoint, ErrMissingMetricsName:
 			w.WriteHeader(http.StatusBadRequest)
