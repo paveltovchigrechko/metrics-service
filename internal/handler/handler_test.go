@@ -19,10 +19,6 @@ func TestNewHandler(t *testing.T) {
 }
 
 func TestMainPage(t *testing.T) {
-	type want struct {
-		code        int
-		contentType string
-	}
 	tests := []struct {
 		name     string
 		method   string
