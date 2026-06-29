@@ -4,6 +4,7 @@ import (
 	"log"
 	"net/http"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/paveltovchigrechko/metrics-service/internal/handler"
 	models "github.com/paveltovchigrechko/metrics-service/internal/model"
 )
@@ -14,12 +15,13 @@ func main() {
 
 func run() {
 	storage := models.NewStorage()
-	server := http.NewServeMux()
 	h := handler.NewHandler(storage)
+	r := chi.NewRouter()
 
-	server.HandleFunc(`/`, h.MainPage)
+	r.Post("/update/{metricsType}/{metricsName}/{metricsValue}", h.PostMetrics)
+	r.Get("/", h.MainPage)
 
-	err := http.ListenAndServe(`:8080`, server)
+	err := http.ListenAndServe(`:8080`, r)
 	if err != nil {
 		log.Fatal(err)
 	}

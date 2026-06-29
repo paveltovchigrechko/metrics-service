@@ -64,7 +64,7 @@ func TestMainPage(t *testing.T) {
 			method:   http.MethodPost,
 			target:   "/update/gauge/",
 			headers:  map[string]string{"Content-Type": "text/plain"},
-			wantCode: http.StatusNotFound,
+			wantCode: http.StatusBadRequest,
 			wantType: "",
 		},
 		{
@@ -99,7 +99,7 @@ func TestMainPage(t *testing.T) {
 			s := models.NewStorage()
 			h := NewHandler(s)
 
-			h.MainPage(w, request)
+			h.PostMetrics(w, request)
 
 			res := w.Result()
 			defer res.Body.Close()

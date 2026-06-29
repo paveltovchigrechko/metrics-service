@@ -47,7 +47,7 @@ func TestUpdateMetrics(t *testing.T) {
 			oldDelta = *s.Metrics[test.ID].Delta
 		}
 
-		s.UpdateMetric(&test)
+		s.UpdateMetrics(&test)
 		switch test.MType {
 		case "counter":
 			sum := oldDelta + *test.Delta

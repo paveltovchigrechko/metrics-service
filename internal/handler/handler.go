@@ -22,9 +22,9 @@ func NewHandler(s *models.MemStorage) *AppHandler {
 	return h
 }
 
-func (h *AppHandler) MainPage(w http.ResponseWriter, req *http.Request) {
-	// log.Printf("[DEBUG] Received request: %s", req.URL.Path) // Delete
-	if err := validateReqHeader(req); err != nil {
+func (h *AppHandler) PostMetrics(w http.ResponseWriter, req *http.Request) {
+	log.Printf("[DEBUG] Received request: %s", req.URL.Path) // Delete
+	if err := validateReqContentType(req); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		log.Printf("[DEBUG] Header validation failed: %v", err) // Delete
 		return
@@ -32,9 +32,7 @@ func (h *AppHandler) MainPage(w http.ResponseWriter, req *http.Request) {
 
 	if err := validateReqPath(req); err != nil {
 		switch err {
-		case ErrInvalidPath:
-			w.WriteHeader(http.StatusNotFound)
-		case ErrInvalidMetricsValue, ErrInvalidMetricsType, ErrInvalidEndpoint, ErrMissingMetricsName:
+		case ErrInvalidMetricsValue, ErrInvalidMetricsType:
 			w.WriteHeader(http.StatusBadRequest)
 		}
 		log.Printf("[DEBUG] Path validation failed: %v", err) // Delete
@@ -43,6 +41,13 @@ func (h *AppHandler) MainPage(w http.ResponseWriter, req *http.Request) {
 
 	w.WriteHeader(http.StatusOK)
 	h.processMetrics(req.URL)
+}
+
+func (h *AppHandler) MainPage(w http.ResponseWriter, req *http.Request) {
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+
+	w.Write([]byte("Welcome to the Metrics service\n"))
+	h.storage.ListMetrics(w)
 }
 
 func (h *AppHandler) processMetrics(url *url.URL) {
@@ -55,7 +60,7 @@ func (h *AppHandler) processMetrics(url *url.URL) {
 		h.storage.Metrics[metric.ID] = metric
 	} else {
 		// Update existing metric.
-		h.storage.UpdateMetric(metric)
+		h.storage.UpdateMetrics(metric)
 	}
 }
 

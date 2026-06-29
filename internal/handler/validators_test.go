@@ -10,51 +10,19 @@ import (
 
 func TestValidateReqPath(t *testing.T) {
 	testCases := []struct {
-		name        string
-		url         string
-		expectedErr error
+		name string
+		url  string
 	}{
 		{
-			name:        "positive test: valid path",
-			url:         "/update/gauge/metric/1",
-			expectedErr: nil,
-		},
-		{
-			name:        "negative test: invalid path",
-			url:         "/invalid/path",
-			expectedErr: ErrInvalidPath,
+			name: "positive test: valid path",
+			url:  "/update/gauge/metric/1",
 		},
 	}
 
 	for _, test := range testCases {
 		req := httptest.NewRequest(http.MethodPost, test.url, nil)
 		err := validateReqPath(req)
-		assert.Equal(t, test.expectedErr, err)
-	}
-}
-
-func TestValidateReqMethod(t *testing.T) {
-	testCases := []struct {
-		name        string
-		method      string
-		expectedErr error
-	}{
-		{
-			name:        "positive test: POST method",
-			method:      http.MethodPost,
-			expectedErr: nil,
-		},
-		{
-			name:        "negative test: unsupported method",
-			method:      http.MethodGet,
-			expectedErr: ErrInvalidRequestMethod,
-		},
-	}
-
-	for _, test := range testCases {
-		req := httptest.NewRequest(test.method, "/", nil)
-		err := validateReqMethod(req)
-		assert.Equal(t, test.expectedErr, err)
+		assert.Nil(t, err)
 	}
 }
 
