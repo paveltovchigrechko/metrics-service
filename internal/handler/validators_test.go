@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -23,7 +22,7 @@ func TestValidateReqPath(t *testing.T) {
 		{
 			name:        "negative test: invalid path",
 			url:         "/invalid/path",
-			expectedErr: errors.New("Invalid path"),
+			expectedErr: ErrInvalidPath,
 		},
 	}
 
@@ -48,7 +47,7 @@ func TestValidateReqMethod(t *testing.T) {
 		{
 			name:        "negative test: unsupported method",
 			method:      http.MethodGet,
-			expectedErr: errors.New("Invalid request method"),
+			expectedErr: ErrInvalidRequestMethod,
 		},
 	}
 
@@ -64,46 +63,46 @@ func TestValidateReqContentType(t *testing.T) {
 		name        string
 		method      string
 		contentType string
-		expectedErr string
+		expectedErr error
 	}{
 		{
 			name:        "positive test: POST method with text/plain content type",
 			method:      http.MethodPost,
-			contentType: "text/plain",
-			expectedErr: "",
+			contentType: textPlain,
+			expectedErr: nil,
 		},
 		{
 			name:        "positive test: GET method with text/plain content type",
 			method:      http.MethodGet,
-			contentType: "text/plain",
-			expectedErr: "",
+			contentType: textPlain,
+			expectedErr: nil,
 		},
 		{
 			name:        "negative test: POST method with application/json content type",
 			method:      http.MethodGet,
 			contentType: "application/json",
-			expectedErr: "Unsupported content type, only text/plain is supported",
+			expectedErr: ErrUnsupportedContentType,
 		},
 		{
 			name:        "negative test: POST method with extended text/plain content type",
 			method:      http.MethodGet,
 			contentType: "text/plain; charset=utf-8",
-			expectedErr: "Unsupported content type, only text/plain is supported",
+			expectedErr: ErrUnsupportedContentType,
 		},
 	}
 
 	for _, test := range testCases {
 		t.Run(test.name, func(t *testing.T) {
 			req := httptest.NewRequest(test.method, "/", nil)
-			req.Header.Add("Content-Type", test.contentType)
+			req.Header.Add(contentType, test.contentType)
 
 			err := validateReqContentType(req)
 
-			if test.expectedErr == "" {
+			if test.expectedErr == nil {
 				assert.NoError(t, err)
 			} else {
 				assert.Error(t, err)
-				assert.Equal(t, test.expectedErr, err.Error())
+				assert.Equal(t, test.expectedErr, err)
 			}
 		})
 	}

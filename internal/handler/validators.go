@@ -11,7 +11,20 @@ import (
 )
 
 const (
-	endpoint = "update"
+	endpoint    = "update"
+	contentType = "Content-Type"
+	textPlain   = "text/plain"
+)
+
+var (
+	ErrInvalidEndpoint        = errors.New("Invalid endpoint")
+	ErrInvalidMetricsType     = errors.New("Invalid metrics type")
+	ErrInvalidMetricsValue    = errors.New("Invalid metric value")
+	ErrInvalidPath            = errors.New("Invalid path")
+	ErrInvalidRequestMethod   = errors.New("Invalid request method")
+	ErrMissingContentType     = errors.New("Missing Content-Type header")
+	ErrMissingMetricsName     = errors.New("No metrics name")
+	ErrUnsupportedContentType = errors.New("Unsupported content type")
 )
 
 func validateReqPath(req *http.Request) error {
@@ -20,36 +33,36 @@ func validateReqPath(req *http.Request) error {
 	pathParts := strings.Split(path, "/")
 	// Expect /update/<metric_type>/<metric_name>/<metric_value> path in the request.
 	if len(pathParts) != 5 {
-		return errors.New("Invalid path")
+		return ErrInvalidPath
 	}
 
 	if strings.Compare(pathParts[1], endpoint) != 0 {
-		return errors.New("Invalid endpoint")
+		return ErrInvalidEndpoint
 	}
 
-	metricType := pathParts[2]
+	metricsType := pathParts[2]
 
-	if strings.Compare(metricType, models.Counter) != 0 && strings.Compare(metricType, models.Gauge) != 0 {
-		return errors.New("Invalid metric type")
+	if strings.Compare(metricsType, models.Counter) != 0 && strings.Compare(metricsType, models.Gauge) != 0 {
+		return ErrInvalidMetricsType
 	}
 
-	if strings.Compare(metricType, models.Counter) == 0 { // Expect int64 value for this type.
+	if strings.Compare(metricsType, models.Counter) == 0 { // Expect int64 value for this type.
 		_, err := strconv.ParseInt(pathParts[4], 10, 64)
 		if err != nil {
-			return errors.New("Invalid metric value")
+			return ErrInvalidMetricsValue
 		}
 	}
 
-	if strings.Compare(metricType, models.Gauge) == 0 { // Expect float64 value for this type.
+	if strings.Compare(metricsType, models.Gauge) == 0 { // Expect float64 value for this type.
 		_, err := strconv.ParseFloat(pathParts[4], 64)
 		if err != nil {
-			return errors.New("Invalid metric value")
+			return ErrInvalidMetricsValue
 		}
 	}
 
 	metricName := pathParts[3]
 	if len(metricName) == 0 { // Expect to have metric name.
-		return errors.New("No metric name")
+		return ErrMissingMetricsName
 	}
 
 	return nil
@@ -74,21 +87,21 @@ var reqHeaderValidators = []requestValidator{
 
 func validateReqMethod(req *http.Request) error {
 	if req.Method != http.MethodPost {
-		return errors.New("Invalid request method")
+		return ErrInvalidRequestMethod
 	}
 
 	return nil
 }
 
 func validateReqContentType(req *http.Request) error {
-	contentTypes := req.Header.Values("Content-Type")
+	contentTypes := req.Header.Values(contentType)
 
 	if len(contentTypes) == 0 {
-		return errors.New("Missing Content-Type header")
+		return ErrMissingContentType
 	}
 
-	if !slices.Contains(contentTypes, "text/plain") { // Do we need other types here?
-		return errors.New("Unsupported content type, only text/plain is supported")
+	if !slices.Contains(contentTypes, textPlain) { // Do we need other types here?
+		return ErrUnsupportedContentType
 	}
 
 	return nil

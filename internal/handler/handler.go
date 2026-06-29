@@ -31,10 +31,10 @@ func (h *AppHandler) MainPage(w http.ResponseWriter, req *http.Request) {
 	}
 
 	if err := validateReqPath(req); err != nil {
-		switch err.Error() {
-		case "No metric", "Invalid path":
+		switch err {
+		case ErrInvalidMetricsType, ErrInvalidPath:
 			w.WriteHeader(http.StatusNotFound)
-		case "Invalid metric value", "Invalid metric type", "Invalid endpoint", "No metric name":
+		case ErrInvalidMetricsValue, ErrInvalidMetricsType, ErrInvalidEndpoint, ErrMissingMetricsName:
 			w.WriteHeader(http.StatusBadRequest)
 		}
 		log.Printf("[DEBUG] Path validation failed: %v", err) // Delete

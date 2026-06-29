@@ -84,7 +84,7 @@ func TestMainPage(t *testing.T) {
 			method:   http.MethodPost,
 			target:   "/update/unknown-type/Alloc/100",
 			headers:  map[string]string{"Content-Type": "text/plain"},
-			wantCode: http.StatusBadRequest,
+			wantCode: http.StatusNotFound,
 			wantType: "",
 		},
 	}

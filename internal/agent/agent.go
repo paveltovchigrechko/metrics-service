@@ -21,6 +21,7 @@ const (
 type Agent struct {
 	m      *runtime.MemStats
 	client *http.Client
+	host   string
 
 	Alloc         uint64
 	BuckHashSys   uint64
@@ -61,6 +62,7 @@ func NewAgent() *Agent {
 		client: &http.Client{
 			Timeout: 2 * time.Second,
 		},
+		host:        host,
 		PollCount:   0,
 		RandomValue: calcNewRandomValue(),
 	}
@@ -367,7 +369,7 @@ func (a *Agent) buildMetrics() []*models.Metrics {
 
 func (a *Agent) SendMetrics(metrics []*models.Metrics) error {
 	for _, m := range metrics {
-		url := createURLFromMetric(m)
+		url := a.createURLFromMetric(m)
 		resp, err := a.client.Post(url, contentType, nil)
 		if err != nil {
 			return err
@@ -379,13 +381,13 @@ func (a *Agent) SendMetrics(metrics []*models.Metrics) error {
 	return nil
 }
 
-func createURLFromMetric(m *models.Metrics) string {
+func (a *Agent) createURLFromMetric(m *models.Metrics) string {
 	var url string
 	switch m.MType {
 	case models.Counter:
-		url = fmt.Sprintf("%s/update/%s/%s/%d", host, m.MType, m.ID, *m.Delta)
+		url = fmt.Sprintf("%s/update/%s/%s/%d", a.host, m.MType, m.ID, *m.Delta)
 	case models.Gauge:
-		url = fmt.Sprintf("%s/update/%s/%s/%.2f", host, m.MType, m.ID, *m.Value)
+		url = fmt.Sprintf("%s/update/%s/%s/%.2f", a.host, m.MType, m.ID, *m.Value)
 	default:
 	}
 
