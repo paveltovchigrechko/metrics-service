@@ -28,6 +28,11 @@ func (ms *MemStorage) UpdateMetrics(m *Metrics) {
 }
 
 func (ms *MemStorage) ListMetrics(w http.ResponseWriter) {
+	if len(ms.Metrics) == 0 {
+		w.Write([]byte("Currently there are no metrics to display\n"))
+		return
+	}
+
 	names := make([]string, 0, len(ms.Metrics))
 	for name := range ms.Metrics {
 		names = append(names, name)

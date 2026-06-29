@@ -34,6 +34,8 @@ func (h *AppHandler) PostMetrics(w http.ResponseWriter, req *http.Request) {
 		switch err {
 		case ErrInvalidMetricsValue, ErrInvalidMetricsType:
 			w.WriteHeader(http.StatusBadRequest)
+		default:
+			w.WriteHeader(http.StatusBadRequest)
 		}
 		log.Printf("[DEBUG] Path validation failed: %v", err) // Delete
 		return

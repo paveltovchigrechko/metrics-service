@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"testing"
 
+	"github.com/go-chi/chi/v5"
 	models "github.com/paveltovchigrechko/metrics-service/internal/model"
 	"github.com/stretchr/testify/assert"
 )
@@ -18,7 +19,7 @@ func TestNewHandler(t *testing.T) {
 	assert.NotNil(t, h.storage)
 }
 
-func TestMainPage(t *testing.T) {
+func TestPostMetrics(t *testing.T) {
 	tests := []struct {
 		name     string
 		method   string
@@ -87,27 +88,31 @@ func TestMainPage(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			// 1. Pass the test case's specific HTTP method and target URL path string
 			request := httptest.NewRequest(test.method, test.target, nil)
 
-			// 2. Inject the custom headers for this test case
 			for key, value := range test.headers {
 				request.Header.Set(key, value)
 			}
 
-			w := httptest.NewRecorder()
 			s := models.NewStorage()
 			h := NewHandler(s)
 
-			h.PostMetrics(w, request)
+			r := chi.NewRouter()
+
+			r.Method(http.MethodPost, "/update/{metricsType}/{metricsName}/{metricsValue}", http.HandlerFunc(h.PostMetrics))
+
+			r.NotFound(h.PostMetrics)
+			r.MethodNotAllowed(h.PostMetrics)
+
+			w := httptest.NewRecorder()
+
+			r.ServeHTTP(w, request)
 
 			res := w.Result()
 			defer res.Body.Close()
 
-			// 3. Verify the status code matches what we expect
 			assert.Equal(t, test.wantCode, res.StatusCode)
 
-			// 4. Only verify content-type header on successful responses
 			if test.wantCode == http.StatusOK {
 				assert.Equal(t, test.wantType, res.Header.Get("Content-Type"))
 			}

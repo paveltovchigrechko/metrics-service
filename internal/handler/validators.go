@@ -11,7 +11,6 @@ import (
 )
 
 const (
-	endpoint    = "update"
 	contentType = "Content-Type"
 	textPlain   = "text/plain"
 )

@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+
 	"github.com/paveltovchigrechko/metrics-service/internal/handler"
 	models "github.com/paveltovchigrechko/metrics-service/internal/model"
 )

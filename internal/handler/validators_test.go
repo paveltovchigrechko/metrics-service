@@ -1,28 +1,80 @@
 package handler
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestValidateReqPath(t *testing.T) {
 	testCases := []struct {
-		name string
-		url  string
+		name        string
+		url         string
+		urlParams   map[string]string
+		expectedErr error
 	}{
 		{
-			name: "positive test: valid path",
-			url:  "/update/gauge/metric/1",
+			name: "positive test: valid gauge",
+			url:  "/update/gauge/metric/1.23",
+			urlParams: map[string]string{
+				"metricsType":  "gauge",
+				"metricsValue": "1.23",
+			},
+			expectedErr: nil,
+		},
+		{
+			name: "positive test: valid counter",
+			url:  "/update/counter/metric/42",
+			urlParams: map[string]string{
+				"metricsType":  "counter",
+				"metricsValue": "42",
+			},
+			expectedErr: nil,
+		},
+		{
+			name: "negative test: invalid metrics type",
+			url:  "/update/histogram/metric/100",
+			urlParams: map[string]string{
+				"metricsType":  "histogram",
+				"metricsValue": "100",
+			},
+			expectedErr: ErrInvalidMetricsType,
+		},
+		{
+			name: "negative test: invalid gauge float",
+			url:  "/update/gauge/metric/not-a-float",
+			urlParams: map[string]string{
+				"metricsType":  "gauge",
+				"metricsValue": "not-a-float",
+			},
+			expectedErr: ErrInvalidMetricsValue,
 		},
 	}
 
 	for _, test := range testCases {
-		req := httptest.NewRequest(http.MethodPost, test.url, nil)
-		err := validateReqPath(req)
-		assert.Nil(t, err)
+		t.Run(test.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodPost, test.url, nil)
+
+			chiCtx := chi.NewRouteContext()
+			for key, val := range test.urlParams {
+				chiCtx.URLParams.Add(key, val)
+			}
+
+			ctx := context.WithValue(req.Context(), chi.RouteCtxKey, chiCtx)
+			req = req.WithContext(ctx)
+
+			err := validateReqPath(req)
+
+			if test.expectedErr == nil {
+				assert.NoError(t, err)
+			} else {
+				assert.ErrorIs(t, err, test.expectedErr)
+			}
+		})
 	}
 }
 
