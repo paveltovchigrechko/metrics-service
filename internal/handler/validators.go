@@ -23,13 +23,18 @@ var (
 	ErrUnsupportedContentType = errors.New("Unsupported content type")
 )
 
-func validateReqPath(req *http.Request) error {
+func validateMetricsType(req *http.Request) error {
 	metricsType := chi.URLParam(req, "metricsType")
-	metricsValue := chi.URLParam(req, "metricsValue")
-
 	if metricsType != models.Counter && metricsType != models.Gauge {
 		return ErrInvalidMetricsType
 	}
+
+	return nil
+}
+
+func validateMetricsValue(req *http.Request) error {
+	metricsType := chi.URLParam(req, "metricsType")
+	metricsValue := chi.URLParam(req, "metricsValue")
 
 	if metricsType == models.Counter { // Expect int64 value for this type.
 		_, err := strconv.ParseInt(metricsValue, 10, 64)
@@ -43,6 +48,18 @@ func validateReqPath(req *http.Request) error {
 		if err != nil {
 			return ErrInvalidMetricsValue
 		}
+	}
+
+	return nil
+}
+
+func validateReqPath(req *http.Request) error {
+	if err := validateMetricsType(req); err != nil {
+		return err
+	}
+
+	if err := validateMetricsValue(req); err != nil {
+		return err
 	}
 
 	return nil

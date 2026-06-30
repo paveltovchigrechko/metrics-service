@@ -21,6 +21,7 @@ func run() {
 
 	r.Post("/update/{metricsType}/{metricsName}/{metricsValue}", h.PostMetrics)
 	r.Get("/", h.MainPage)
+	r.Get("/value/{metricsType}/{metricsName}", h.MetricsValue)
 
 	err := http.ListenAndServe(`:8080`, r)
 	if err != nil {

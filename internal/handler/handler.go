@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/go-chi/chi/v5"
 	models "github.com/paveltovchigrechko/metrics-service/internal/model"
 )
 
@@ -50,6 +51,29 @@ func (h *AppHandler) MainPage(w http.ResponseWriter, req *http.Request) {
 
 	w.Write([]byte("Welcome to the Metrics service\n"))
 	h.storage.ListMetrics(w)
+}
+
+func (h *AppHandler) MetricsValue(w http.ResponseWriter, req *http.Request) {
+	err := validateMetricsType(req)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	metricsName := chi.URLParam(req, "metricsName")
+	metrics, err := h.storage.GetMetrics(metricsName)
+	if err != nil {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	switch metrics.MType {
+	case models.Counter:
+		w.Write([]byte(strconv.FormatInt(*metrics.Delta, 10)))
+	case models.Gauge:
+		w.Write([]byte(strconv.FormatFloat(*metrics.Value, 'f', -1, 64)))
+	}
 }
 
 func (h *AppHandler) processMetrics(url *url.URL) {

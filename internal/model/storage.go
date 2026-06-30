@@ -1,6 +1,7 @@
 package models
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"sort"
@@ -15,6 +16,15 @@ func NewStorage() *MemStorage {
 	return &MemStorage{
 		Metrics: make(map[string]*Metrics),
 	}
+}
+
+func (ms *MemStorage) GetMetrics(name string) (*Metrics, error) {
+	metrics, ok := ms.Metrics[name]
+	if !ok {
+		return nil, errors.New("metrics not found")
+	}
+
+	return metrics, nil
 }
 
 func (ms *MemStorage) UpdateMetrics(m *Metrics) {
