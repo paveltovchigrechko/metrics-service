@@ -3,8 +3,8 @@ package handler
 import (
 	"errors"
 	"net/http"
-	"slices"
 	"strconv"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	models "github.com/paveltovchigrechko/metrics-service/internal/model"
@@ -16,10 +16,10 @@ const (
 )
 
 var (
-	ErrInvalidMetricsType     = errors.New("Invalid metrics type")
-	ErrInvalidMetricsValue    = errors.New("Invalid metric value")
-	ErrInvalidRequestMethod   = errors.New("Invalid request method")
-	ErrMissingContentType     = errors.New("Missing Content-Type header")
+	ErrInvalidMetricsType   = errors.New("Invalid metrics type")
+	ErrInvalidMetricsValue  = errors.New("Invalid metric value")
+	ErrInvalidRequestMethod = errors.New("Invalid request method")
+	// ErrMissingContentType     = errors.New("Missing Content-Type header")
 	ErrUnsupportedContentType = errors.New("Unsupported content type")
 )
 
@@ -66,13 +66,13 @@ func validateReqPath(req *http.Request) error {
 }
 
 func validateReqContentType(req *http.Request) error {
-	contentTypes := req.Header.Values(contentType)
+	ct := req.Header.Get("Content-Type")
 
-	if len(contentTypes) == 0 {
-		return ErrMissingContentType
+	if ct == "" {
+		return nil
 	}
 
-	if !slices.Contains(contentTypes, textPlain) { // Do we need other types here?
+	if !strings.HasPrefix(ct, "text/plain") {
 		return ErrUnsupportedContentType
 	}
 
