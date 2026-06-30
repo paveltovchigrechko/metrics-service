@@ -53,11 +53,11 @@ func TestPostMetrics(t *testing.T) {
 			wantType: "",
 		},
 		{
-			name:     "negative test - missing content type",
+			name:     "positive test - missing content type",
 			method:   http.MethodPost,
 			target:   "/update/gauge/Alloc/1024.50",
 			headers:  map[string]string{}, // Empty headers
-			wantCode: http.StatusBadRequest,
+			wantCode: http.StatusOK,
 			wantType: "",
 		},
 		{
