@@ -83,30 +83,42 @@ func TestValidateReqContentType(t *testing.T) {
 		name        string
 		method      string
 		contentType string
+		hasHeader   bool
 		expectedErr error
 	}{
 		{
 			name:        "positive test: POST method with text/plain content type",
 			method:      http.MethodPost,
-			contentType: textPlain,
+			contentType: "text/plain",
+			hasHeader:   true,
 			expectedErr: nil,
 		},
 		{
 			name:        "positive test: GET method with text/plain content type",
 			method:      http.MethodGet,
-			contentType: textPlain,
+			contentType: "text/plain",
+			hasHeader:   true,
+			expectedErr: nil,
+		},
+		{
+			name:        "positive test: missing content type header is allowed",
+			method:      http.MethodPost,
+			contentType: "",
+			hasHeader:   false,
+			expectedErr: nil,
+		},
+		{
+			name:        "positive test: extended text/plain content type is now valid via prefix match",
+			method:      http.MethodPost,
+			contentType: "text/plain; charset=utf-8",
+			hasHeader:   true,
 			expectedErr: nil,
 		},
 		{
 			name:        "negative test: POST method with application/json content type",
-			method:      http.MethodGet,
+			method:      http.MethodPost,
 			contentType: "application/json",
-			expectedErr: ErrUnsupportedContentType,
-		},
-		{
-			name:        "negative test: POST method with extended text/plain content type",
-			method:      http.MethodGet,
-			contentType: "text/plain; charset=utf-8",
+			hasHeader:   true,
 			expectedErr: ErrUnsupportedContentType,
 		},
 	}
@@ -114,15 +126,17 @@ func TestValidateReqContentType(t *testing.T) {
 	for _, test := range testCases {
 		t.Run(test.name, func(t *testing.T) {
 			req := httptest.NewRequest(test.method, "/", nil)
-			req.Header.Add(contentType, test.contentType)
+
+			if test.hasHeader {
+				req.Header.Set("Content-Type", test.contentType)
+			}
 
 			err := validateReqContentType(req)
 
 			if test.expectedErr == nil {
 				assert.NoError(t, err)
 			} else {
-				assert.Error(t, err)
-				assert.Equal(t, test.expectedErr, err)
+				assert.ErrorIs(t, err, test.expectedErr)
 			}
 		})
 	}
