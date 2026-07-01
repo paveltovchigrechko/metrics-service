@@ -12,6 +12,8 @@ type MemStorage struct {
 	Metrics map[string]*Metrics
 }
 
+var errMetricsNotFound = errors.New("metrics not found")
+
 func NewStorage() *MemStorage {
 	return &MemStorage{
 		Metrics: make(map[string]*Metrics),
@@ -21,7 +23,7 @@ func NewStorage() *MemStorage {
 func (ms *MemStorage) GetMetrics(name string) (*Metrics, error) {
 	metrics, ok := ms.Metrics[name]
 	if !ok {
-		return nil, errors.New("metrics not found")
+		return nil, errMetricsNotFound
 	}
 
 	return metrics, nil

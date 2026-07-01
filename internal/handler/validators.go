@@ -66,13 +66,13 @@ func validateReqPath(req *http.Request) error {
 }
 
 func validateReqContentType(req *http.Request) error {
-	ct := req.Header.Get("Content-Type")
+	ct := req.Header.Get(contentType)
 
 	if ct == "" {
 		return nil
 	}
 
-	if !strings.HasPrefix(ct, "text/plain") {
+	if !strings.HasPrefix(ct, textPlain) {
 		return ErrUnsupportedContentType
 	}
 

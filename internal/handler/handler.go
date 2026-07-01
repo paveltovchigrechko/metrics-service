@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"log"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -24,10 +23,10 @@ func NewHandler(s *models.MemStorage) *AppHandler {
 }
 
 func (h *AppHandler) PostMetrics(w http.ResponseWriter, req *http.Request) {
-	log.Printf("[DEBUG] Received request: %s", req.URL.Path) // Delete
+	// log.Printf("[DEBUG] Received request: %s", req.URL.Path) // Delete
 	if err := validateReqContentType(req); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
-		log.Printf("[DEBUG] Header validation failed: %v", err) // Delete
+		// log.Printf("[DEBUG] Header validation failed: %v", err) // Delete
 		return
 	}
 
@@ -38,7 +37,7 @@ func (h *AppHandler) PostMetrics(w http.ResponseWriter, req *http.Request) {
 		default:
 			w.WriteHeader(http.StatusBadRequest)
 		}
-		log.Printf("[DEBUG] Path validation failed: %v", err) // Delete
+		// log.Printf("[DEBUG] Path validation failed: %v", err) // Delete
 		return
 	}
 
@@ -47,7 +46,7 @@ func (h *AppHandler) PostMetrics(w http.ResponseWriter, req *http.Request) {
 }
 
 func (h *AppHandler) MainPage(w http.ResponseWriter, req *http.Request) {
-	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.Header().Set(contentType, "text/plain; charset=utf-8")
 
 	w.Write([]byte("Welcome to the Metrics service\n"))
 	h.storage.ListMetrics(w)
