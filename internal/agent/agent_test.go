@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"runtime"
+	"strings"
 	"sync"
 	"testing"
 
@@ -37,7 +38,8 @@ func TestSendMetrics(t *testing.T) {
 		defer server.Close()
 
 		a, _ := NewAgent()
-		a.cfg.ServerAddress = server.URL
+		cleanAddr := strings.TrimPrefix(server.URL, "http://")
+		a.cfg.ServerAddress = cleanAddr
 
 		counterMetric, err := models.CreateMetrics("PollCount", models.Counter, 10, 0)
 		require.NoError(t, err)
