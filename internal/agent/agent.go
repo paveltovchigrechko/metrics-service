@@ -9,19 +9,19 @@ import (
 	"time"
 
 	"github.com/go-resty/resty/v2"
+	"github.com/paveltovchigrechko/metrics-service/internal/config"
 	models "github.com/paveltovchigrechko/metrics-service/internal/model"
 )
 
 const (
 	contentType  = "text/plain"
-	host         = "http://localhost:8080"
 	pollInterval = 2 * time.Second
 )
 
 type Agent struct {
 	m      *runtime.MemStats
 	client *resty.Client
-	host   string
+	cfg    *config.AgentConfig
 
 	Alloc         uint64
 	BuckHashSys   uint64
@@ -55,34 +55,42 @@ type Agent struct {
 	RandomValue float64
 }
 
-func NewAgent() *Agent {
+func NewAgent() (*Agent, error) {
 	m := new(runtime.MemStats)
 	c := resty.New().
 		SetTimeout(pollInterval).
 		SetHeader("Content-Type", contentType)
+	cfg, err := config.SetAgentConfig()
+	if err != nil {
+		return nil, err
+	}
 	return &Agent{
 		m:           m,
 		client:      c,
-		host:        host,
+		cfg:         cfg,
 		PollCount:   0,
 		RandomValue: calcNewRandomValue(),
-	}
+	}, nil
 }
 
 func (a *Agent) Run() {
-	for {
-		runtime.ReadMemStats(a.m)
-		a.updateMetrics()
+	// time.Ticker was suggested by AI
+	pollTicker := time.NewTicker(a.cfg.PollInterval)
+	reportTicker := time.NewTicker(a.cfg.ReportInterval)
 
-		// Check if 10 seconds elapsed
-		if a.PollCount%5 == 0 {
+	for {
+		select {
+		case <-pollTicker.C:
+			runtime.ReadMemStats(a.m)
+			a.updateMetrics()
+			log.Printf("Poll count: %d\n", a.PollCount)
+		case <-reportTicker.C:
 			metrics := a.buildMetrics()
 			err := a.SendMetrics(metrics)
 			if err != nil {
 				log.Print(err)
 			}
 		}
-		time.Sleep(pollInterval)
 	}
 }
 
@@ -346,7 +354,7 @@ func (a *Agent) SendMetrics(metrics []*models.Metrics) error {
 		}
 
 	}
-
+	// Should we reset a.PollCount here?
 	return nil
 }
 
@@ -354,9 +362,9 @@ func (a *Agent) createURLFromMetric(m *models.Metrics) string {
 	var url string
 	switch m.MType {
 	case models.Counter:
-		url = fmt.Sprintf("%s/update/%s/%s/%d", a.host, m.MType, m.ID, *m.Delta)
+		url = fmt.Sprintf("http://%s/update/%s/%s/%d", a.cfg.ServerAddress, m.MType, m.ID, *m.Delta)
 	case models.Gauge:
-		url = fmt.Sprintf("%s/update/%s/%s/%.2f", a.host, m.MType, m.ID, *m.Value)
+		url = fmt.Sprintf("http://%s/update/%s/%s/%.2f", a.cfg.ServerAddress, m.MType, m.ID, *m.Value)
 	default:
 	}
 
