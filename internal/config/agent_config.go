@@ -31,15 +31,21 @@ func newAgentConfig(addr string, repInt, pollInt time.Duration) *AgentConfig {
 	}
 }
 
-func SetAgentConfig() (*AgentConfig, error) {
-	address := flag.String(servAddressFlag, defaultServerAddress, "Metrics server HTTP address")
-	reportSeconds := flag.Int(reportIntervalFlag, defaultReportInterval, "Metrics report frequency (seconds)")
-	pollSeconds := flag.Int(pollIntervalFlag, defaultPollInterval, "Metrics update frequency (seconds)")
-	flag.Parse()
+func SetAgentConfig(args []string) (*AgentConfig, error) {
+	fs := flag.NewFlagSet("agent", flag.ContinueOnError)
+	address := fs.String(servAddressFlag, defaultServerAddress, "Metrics server HTTP address")
+	reportSeconds := fs.Int(reportIntervalFlag, defaultReportInterval, "Metrics report frequency (seconds)")
+	pollSeconds := fs.Int(pollIntervalFlag, defaultPollInterval, "Metrics update frequency (seconds)")
 
+	err := fs.Parse(args)
+
+	if err != nil {
+		return nil, err
+	}
 	if err := validateIntervals(*reportSeconds, *pollSeconds); err != nil {
 		return nil, err
 	}
+
 	reportInterval := time.Duration(*reportSeconds) * time.Second
 	pollInterval := time.Duration(*pollSeconds) * time.Second
 	return newAgentConfig(*address, reportInterval, pollInterval), nil

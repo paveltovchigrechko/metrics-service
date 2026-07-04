@@ -8,16 +8,19 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/paveltovchigrechko/metrics-service/internal/config"
 	models "github.com/paveltovchigrechko/metrics-service/internal/model"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestNewAgent(t *testing.T) {
-	a, err := NewAgent()
+	cfg, err := config.SetAgentConfig([]string{})
+	require.NotNil(t, cfg)
+	require.Nil(t, err)
+	a := NewAgent(cfg)
 
 	assert.NotNil(t, a)
-	assert.Nil(t, err)
 	assert.NotNil(t, a.m)
 	assert.NotNil(t, a.client)
 	assert.NotNil(t, a.cfg)
@@ -37,7 +40,11 @@ func TestSendMetrics(t *testing.T) {
 		}))
 		defer server.Close()
 
-		a, _ := NewAgent()
+		cfg, err := config.SetAgentConfig([]string{})
+		require.NotNil(t, cfg)
+		require.Nil(t, err)
+		a := NewAgent(cfg)
+
 		cleanAddr := strings.TrimPrefix(server.URL, "http://")
 		a.cfg.ServerAddress = cleanAddr
 
@@ -58,7 +65,10 @@ func TestSendMetrics(t *testing.T) {
 	})
 
 	t.Run("returns error when server is unreachable", func(t *testing.T) {
-		a, _ := NewAgent()
+		cfg, err := config.SetAgentConfig([]string{})
+		require.NotNil(t, cfg)
+		require.Nil(t, err)
+		a := NewAgent(cfg)
 
 		metric, err := models.CreateMetrics("Alloc", models.Gauge, 0, 1.0)
 		require.NoError(t, err)
@@ -73,7 +83,10 @@ func TestSendMetrics(t *testing.T) {
 		}))
 		server.Close() // closed immediately so every request fails
 
-		a, _ := NewAgent()
+		cfg, err := config.SetAgentConfig([]string{})
+		require.NotNil(t, cfg)
+		require.Nil(t, err)
+		a := NewAgent(cfg)
 
 		m1, err := models.CreateMetrics("Alloc", models.Gauge, 0, 1.0)
 		require.NoError(t, err)
@@ -85,9 +98,12 @@ func TestSendMetrics(t *testing.T) {
 	})
 
 	t.Run("sends empty metrics slice without error", func(t *testing.T) {
-		a, _ := NewAgent()
+		cfg, err := config.SetAgentConfig([]string{})
+		require.NotNil(t, cfg)
+		require.Nil(t, err)
+		a := NewAgent(cfg)
 
-		err := a.SendMetrics([]*models.Metrics{})
+		err = a.SendMetrics([]*models.Metrics{})
 		assert.NoError(t, err)
 	})
 }

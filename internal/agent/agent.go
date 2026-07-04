@@ -55,22 +55,19 @@ type Agent struct {
 	RandomValue float64
 }
 
-func NewAgent() (*Agent, error) {
+func NewAgent(cfg *config.AgentConfig) *Agent {
 	m := new(runtime.MemStats)
 	c := resty.New().
 		SetTimeout(pollInterval).
 		SetHeader("Content-Type", contentType)
-	cfg, err := config.SetAgentConfig()
-	if err != nil {
-		return nil, err
-	}
+
 	return &Agent{
 		m:           m,
 		client:      c,
 		cfg:         cfg,
 		PollCount:   0,
 		RandomValue: calcNewRandomValue(),
-	}, nil
+	}
 }
 
 func (a *Agent) Run() {
