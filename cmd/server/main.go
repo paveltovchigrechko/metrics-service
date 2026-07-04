@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 	"net/http"
+	"os"
 
 	"github.com/go-chi/chi/v5"
 
@@ -19,13 +20,16 @@ func run() {
 	storage := models.NewStorage()
 	h := handler.NewHandler(storage)
 	r := chi.NewRouter()
-	cfg := config.SetServerConfig()
+	cfg, err := config.SetServerConfig(os.Args[1:])
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	r.Post("/update/{metricsType}/{metricsName}/{metricsValue}", h.PostMetrics)
 	r.Get("/", h.MainPage)
 	r.Get("/value/{metricsType}/{metricsName}", h.MetricsValue)
 
-	err := http.ListenAndServe(cfg.ServerAddress, r)
+	err = http.ListenAndServe(cfg.ServerAddress, r)
 	if err != nil {
 		log.Fatal(err)
 	}

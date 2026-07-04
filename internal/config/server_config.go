@@ -17,8 +17,13 @@ func newServerConfig(addr string) *ServerConfig {
 	}
 }
 
-func SetServerConfig() *ServerConfig {
-	address := flag.String(serverAddressFlag, defaultAddress, "Metrics server HTTP address")
-	flag.Parse()
-	return newServerConfig(*address)
+func SetServerConfig(args []string) (*ServerConfig, error) {
+	fs := flag.NewFlagSet("server", flag.ContinueOnError)
+	address := fs.String(serverAddressFlag, defaultAddress, "Metrics server HTTP address")
+	err := fs.Parse(args)
+
+	if err != nil {
+		return nil, err
+	}
+	return newServerConfig(*address), nil
 }

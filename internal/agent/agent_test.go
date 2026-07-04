@@ -54,7 +54,7 @@ func TestSendMetrics(t *testing.T) {
 		gaugeMetric, err := models.CreateMetrics("Alloc", models.Gauge, 0, 123.45)
 		require.NoError(t, err)
 
-		err = a.SendMetrics([]*models.Metrics{counterMetric, gaugeMetric})
+		err = a.sendMetrics([]*models.Metrics{counterMetric, gaugeMetric})
 		require.NoError(t, err)
 
 		mu.Lock()
@@ -73,7 +73,7 @@ func TestSendMetrics(t *testing.T) {
 		metric, err := models.CreateMetrics("Alloc", models.Gauge, 0, 1.0)
 		require.NoError(t, err)
 
-		err = a.SendMetrics([]*models.Metrics{metric})
+		err = a.sendMetrics([]*models.Metrics{metric})
 		assert.Error(t, err)
 	})
 
@@ -93,7 +93,7 @@ func TestSendMetrics(t *testing.T) {
 		m2, err := models.CreateMetrics("Frees", models.Gauge, 0, 2.0)
 		require.NoError(t, err)
 
-		err = a.SendMetrics([]*models.Metrics{m1, m2})
+		err = a.sendMetrics([]*models.Metrics{m1, m2})
 		assert.Error(t, err)
 	})
 
@@ -103,7 +103,7 @@ func TestSendMetrics(t *testing.T) {
 		require.Nil(t, err)
 		a := NewAgent(cfg)
 
-		err = a.SendMetrics([]*models.Metrics{})
+		err = a.sendMetrics([]*models.Metrics{})
 		assert.NoError(t, err)
 	})
 }

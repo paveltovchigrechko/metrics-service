@@ -21,7 +21,7 @@ const (
 	defaultPollInterval   = 2
 )
 
-var ErrIncorrectInterval = errors.New("interval must be positive")
+var errIncorrectInterval = errors.New("interval must be positive")
 
 func newAgentConfig(addr string, repInt, pollInt time.Duration) *AgentConfig {
 	return &AgentConfig{
@@ -42,6 +42,7 @@ func SetAgentConfig(args []string) (*AgentConfig, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	if err := validateIntervals(*reportSeconds, *pollSeconds); err != nil {
 		return nil, err
 	}
@@ -53,7 +54,7 @@ func SetAgentConfig(args []string) (*AgentConfig, error) {
 
 func validateIntervals(rInt, pInt int) error {
 	if rInt <= 0 || pInt <= 0 {
-		return ErrIncorrectInterval
+		return errIncorrectInterval
 	}
 
 	return nil

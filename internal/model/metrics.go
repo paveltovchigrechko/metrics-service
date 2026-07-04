@@ -9,6 +9,8 @@ const (
 	Gauge   = "gauge"
 )
 
+var errIncorrectMetricsType = errors.New("Incorrect metrics type")
+
 // NOTE: Не усложняем пример, вводя иерархическую вложенность структур.
 // Органичиваясь плоской моделью.
 // Delta и Value объявлены через указатели,
@@ -33,7 +35,7 @@ func CreateMetrics(name, mtype string, delta int64, value float64) (*Metrics, er
 	case Gauge:
 		m.Value = &value
 	default:
-		return nil, errors.New("Incorrect metrics type")
+		return nil, errIncorrectMetricsType
 	}
 
 	return m, nil

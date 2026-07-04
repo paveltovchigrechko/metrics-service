@@ -1,7 +1,6 @@
 package config
 
 import (
-	"flag"
 	"os"
 	"testing"
 
@@ -38,13 +37,10 @@ func TestSetServerConfig(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			flag.CommandLine = flag.NewFlagSet(os.Args[0], flag.ExitOnError)
-
-			os.Args = tc.args
-
-			cfg := SetServerConfig()
+			cfg, err := SetServerConfig(tc.args[1:])
 
 			assert.NotNil(t, cfg)
+			assert.Nil(t, err)
 			assert.Equal(t, tc.wantAddr, cfg.ServerAddress)
 		})
 	}

@@ -16,10 +16,9 @@ const (
 )
 
 var (
-	ErrInvalidMetricsType   = errors.New("Invalid metrics type")
-	ErrInvalidMetricsValue  = errors.New("Invalid metric value")
-	ErrInvalidRequestMethod = errors.New("Invalid request method")
-	// ErrMissingContentType     = errors.New("Missing Content-Type header")
+	ErrInvalidMetricsType     = errors.New("Invalid metrics type")
+	ErrInvalidMetricsValue    = errors.New("Invalid metric value")
+	ErrInvalidRequestMethod   = errors.New("Invalid request method")
 	ErrUnsupportedContentType = errors.New("Unsupported content type")
 )
 

@@ -14,8 +14,7 @@ import (
 )
 
 const (
-	contentType  = "text/plain"
-	pollInterval = 2 * time.Second
+	contentType = "text/plain"
 )
 
 type Agent struct {
@@ -58,7 +57,7 @@ type Agent struct {
 func NewAgent(cfg *config.AgentConfig) *Agent {
 	m := new(runtime.MemStats)
 	c := resty.New().
-		SetTimeout(pollInterval).
+		SetTimeout(cfg.PollInterval).
 		SetHeader("Content-Type", contentType)
 
 	return &Agent{
@@ -83,7 +82,7 @@ func (a *Agent) Run() {
 			log.Printf("Poll count: %d\n", a.PollCount)
 		case <-reportTicker.C:
 			metrics := a.buildMetrics()
-			err := a.SendMetrics(metrics)
+			err := a.sendMetrics(metrics)
 			if err != nil {
 				log.Print(err)
 			}
@@ -342,7 +341,7 @@ func (a *Agent) buildMetrics() []*models.Metrics {
 	return result
 }
 
-func (a *Agent) SendMetrics(metrics []*models.Metrics) error {
+func (a *Agent) sendMetrics(metrics []*models.Metrics) error {
 	for _, m := range metrics {
 		url := a.createURLFromMetric(m)
 		_, err := a.client.R().Post(url)

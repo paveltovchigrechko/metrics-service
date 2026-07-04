@@ -10,6 +10,10 @@ import (
 	models "github.com/paveltovchigrechko/metrics-service/internal/model"
 )
 
+const (
+	introText = "Welcome to the Metrics service\n"
+)
+
 type AppHandler struct {
 	storage *models.MemStorage
 }
@@ -48,7 +52,7 @@ func (h *AppHandler) PostMetrics(w http.ResponseWriter, req *http.Request) {
 func (h *AppHandler) MainPage(w http.ResponseWriter, req *http.Request) {
 	w.Header().Set(contentType, "text/plain; charset=utf-8")
 
-	w.Write([]byte("Welcome to the Metrics service\n"))
+	w.Write([]byte(introText))
 	h.storage.ListMetrics(w)
 }
 
