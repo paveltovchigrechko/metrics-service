@@ -79,7 +79,6 @@ func (a *Agent) Run() {
 		case <-pollTicker.C:
 			runtime.ReadMemStats(a.m)
 			a.updateMetrics()
-			log.Printf("Poll count: %d\n", a.PollCount)
 		case <-reportTicker.C:
 			metrics := a.buildMetrics()
 			err := a.sendMetrics(metrics)

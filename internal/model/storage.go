@@ -12,7 +12,10 @@ type MemStorage struct {
 	Metrics map[string]*Metrics
 }
 
-var errMetricsNotFound = errors.New("metrics not found")
+var (
+	errMetricsNotFound = errors.New("metrics not found")
+	noMetricsMessage   = "Currently there are no metrics to display\n"
+)
 
 func NewStorage() *MemStorage {
 	return &MemStorage{
@@ -41,7 +44,7 @@ func (ms *MemStorage) UpdateMetrics(m *Metrics) {
 
 func (ms *MemStorage) ListMetrics(w http.ResponseWriter) {
 	if len(ms.Metrics) == 0 {
-		w.Write([]byte("Currently there are no metrics to display\n"))
+		w.Write([]byte(noMetricsMessage))
 		return
 	}
 
