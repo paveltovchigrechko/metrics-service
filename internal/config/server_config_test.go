@@ -23,7 +23,7 @@ func TestSetServerConfig_Positive(t *testing.T) {
 			name:     "No Env + No Flag -> Default address",
 			args:     []string{"cmd"},
 			envValue: "",
-			wantAddr: ":8080",
+			wantAddr: "localhost:8080",
 		},
 		{
 			name:     "No Env + Flag -> Use flag value",
