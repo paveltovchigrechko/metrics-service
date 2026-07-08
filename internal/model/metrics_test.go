@@ -47,12 +47,9 @@ func TestCreateMetricsPositive(t *testing.T) {
 
 	for _, test := range positiveTestCases {
 		result, err := CreateMetrics(test.name, test.mtype, test.delta, test.value)
-		// check error first
 		assert.Nil(t, err)
 
-		// check the structure exists
 		assert.NotNil(t, result)
-		// check fields
 		assert.Equal(t, result.ID, test.name)
 		assert.Equal(t, result.MType, test.mtype)
 
@@ -92,9 +89,7 @@ func TestCreateMetricsNegative(t *testing.T) {
 
 	for _, test := range negativeTestCases {
 		result, err := CreateMetrics(test.name, test.mtype, test.delta, test.value)
-		// check error only
 		assert.EqualError(t, err, test.err.Error())
-		// check the structure doesn't exist
 		assert.Nil(t, result)
 	}
 }

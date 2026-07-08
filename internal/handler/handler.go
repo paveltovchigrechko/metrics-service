@@ -2,9 +2,7 @@ package handler
 
 import (
 	"net/http"
-	"net/url"
 	"strconv"
-	"strings"
 
 	"github.com/go-chi/chi/v5"
 	models "github.com/paveltovchigrechko/metrics-service/internal/model"
@@ -15,10 +13,10 @@ const (
 )
 
 type AppHandler struct {
-	storage *models.MemStorage
+	storage models.Storage
 }
 
-func NewHandler(s *models.MemStorage) *AppHandler {
+func NewHandler(s models.Storage) *AppHandler {
 	h := &AppHandler{
 		storage: s,
 	}
@@ -45,8 +43,12 @@ func (h *AppHandler) PostMetrics(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	err := h.processMetrics(req)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
 	w.WriteHeader(http.StatusOK)
-	h.processMetrics(req.URL)
 }
 
 func (h *AppHandler) MainPage(w http.ResponseWriter, req *http.Request) {
@@ -79,26 +81,20 @@ func (h *AppHandler) MetricsValue(w http.ResponseWriter, req *http.Request) {
 	}
 }
 
-func (h *AppHandler) processMetrics(url *url.URL) {
+func (h *AppHandler) processMetrics(req *http.Request) error {
 	// Parse metric and its value. We know the metric has a name, a correct type, and value.
-	metric := parseMetrics(url)
-
-	// Check if the metric is new or already exists.
-	if _, ok := h.storage.Metrics[metric.ID]; !ok {
-		// Add new metric.
-		h.storage.Metrics[metric.ID] = metric
-	} else {
-		// Update existing metric.
-		h.storage.UpdateMetrics(metric)
+	metric, err := parseMetrics(req)
+	if err != nil {
+		return err
 	}
+
+	return h.storage.SaveMetrics(metric)
 }
 
 // This function assumes the input url.Url passed validateReqPath().
-func parseMetrics(url *url.URL) *models.Metrics {
-	path := url.RequestURI()
-
-	pathParts := strings.Split(path, "/")
-	metricType, metricName, metricValue := pathParts[2], pathParts[3], pathParts[4]
+func parseMetrics(req *http.Request) (*models.Metrics, error) {
+	metricType, metricName, metricValue := chi.URLParam(req, "metricsType"), chi.URLParam(req, "metricsName"), chi.URLParam(req, "metricsValue")
+	// check for empty strings?
 	m := models.Metrics{
 		ID:    metricName,
 		MType: metricType,
@@ -106,12 +102,18 @@ func parseMetrics(url *url.URL) *models.Metrics {
 
 	// TODO: Remove duplicate logic with validateReqPath().
 	if metricType == models.Counter {
-		value, _ := strconv.ParseInt(metricValue, 10, 64) // Process error.
+		value, err := strconv.ParseInt(metricValue, 10, 64)
+		if err != nil {
+			return nil, err
+		}
 		m.Delta = &value
 	} else {
-		value, _ := strconv.ParseFloat(metricValue, 64) // Process error.
+		value, err := strconv.ParseFloat(metricValue, 64)
+		if err != nil {
+			return nil, err
+		}
 		m.Value = &value
 	}
 
-	return &m
+	return &m, nil
 }

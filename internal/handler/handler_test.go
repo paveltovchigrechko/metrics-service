@@ -1,18 +1,39 @@
 package handler
 
 import (
+	"context"
+	"io"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"testing"
 
 	"github.com/go-chi/chi/v5"
 	models "github.com/paveltovchigrechko/metrics-service/internal/model"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
+type MockStorage struct {
+	OnGetMetrics  func(string) (*models.Metrics, error)
+	OnSaveMetrics func(*models.Metrics) error
+	OnListMetrics func(io.Writer)
+}
+
+func (m *MockStorage) GetMetrics(name string) (*models.Metrics, error) { return m.OnGetMetrics(name) }
+func (m *MockStorage) SaveMetrics(mt *models.Metrics) error            { return m.OnSaveMetrics(mt) }
+func (m *MockStorage) ListMetrics(w io.Writer)                         { m.OnListMetrics(w) }
+
+func newRequestWithChiParams(method, target string, params map[string]string) *http.Request {
+	req := httptest.NewRequest(method, target, nil)
+	chiCtx := chi.NewRouteContext()
+	for k, v := range params {
+		chiCtx.URLParams.Add(k, v)
+	}
+	return req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, chiCtx))
+}
+
 func TestNewHandler(t *testing.T) {
-	s := models.NewStorage()
+	s := models.NewMemStorage()
 	h := NewHandler(s)
 
 	assert.NotNil(t, h)
@@ -56,7 +77,7 @@ func TestPostMetrics(t *testing.T) {
 			name:     "positive test - missing content type",
 			method:   http.MethodPost,
 			target:   "/update/gauge/Alloc/1024.50",
-			headers:  map[string]string{}, // Empty headers
+			headers:  map[string]string{},
 			wantCode: http.StatusOK,
 			wantType: "",
 		},
@@ -89,30 +110,25 @@ func TestPostMetrics(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			request := httptest.NewRequest(test.method, test.target, nil)
-
 			for key, value := range test.headers {
 				request.Header.Set(key, value)
 			}
 
-			s := models.NewStorage()
+			s := models.NewMemStorage()
 			h := NewHandler(s)
-
 			r := chi.NewRouter()
 
 			r.Method(http.MethodPost, "/update/{metricsType}/{metricsName}/{metricsValue}", http.HandlerFunc(h.PostMetrics))
-
 			r.NotFound(h.PostMetrics)
 			r.MethodNotAllowed(h.PostMetrics)
 
 			w := httptest.NewRecorder()
-
 			r.ServeHTTP(w, request)
 
 			res := w.Result()
 			defer res.Body.Close()
 
 			assert.Equal(t, test.wantCode, res.StatusCode)
-
 			if test.wantCode == http.StatusOK {
 				assert.Equal(t, test.wantType, res.Header.Get("Content-Type"))
 			}
@@ -121,97 +137,162 @@ func TestPostMetrics(t *testing.T) {
 }
 
 func TestProcessMetrics(t *testing.T) {
-	s := models.NewStorage()
-	h := NewHandler(s)
-
-	counterUrl, _ := url.Parse("http://some-address.domain/update/counter/counter-name/77")
-	gaugeUrl, _ := url.Parse("http://some-address.domain/update/gauge/gauge-name/77.76")
 	testCases := []struct {
-		name string
-		url  *url.URL
+		name        string
+		req         *http.Request
+		expectedID  string
+		expectErr   bool
+		expectSaved bool
+		verify      func(t *testing.T, m *models.Metrics)
 	}{
 		{
-			"URL for counter metrics",
-			counterUrl,
+			name: "processes valid counter metric successfully",
+			req: newRequestWithChiParams(http.MethodPost, "/update/counter/counter-name/77", map[string]string{
+				"metricsType":  "counter",
+				"metricsName":  "counter-name",
+				"metricsValue": "77",
+			}),
+			expectedID:  "counter-name",
+			expectErr:   false,
+			expectSaved: true,
+			verify: func(t *testing.T, m *models.Metrics) {
+				assert.Equal(t, "counter", m.MType)
+				assert.Equal(t, int64(77), *m.Delta)
+				assert.Nil(t, m.Value)
+			},
 		},
 		{
-			"URL for gauge metrics",
-			gaugeUrl,
+			name: "processes valid gauge metric successfully",
+			req: newRequestWithChiParams(http.MethodPost, "/update/gauge/gauge-name/77.76", map[string]string{
+				"metricsType":  "gauge",
+				"metricsName":  "gauge-name",
+				"metricsValue": "77.76",
+			}),
+			expectedID:  "gauge-name",
+			expectErr:   false,
+			expectSaved: true,
+			verify: func(t *testing.T, m *models.Metrics) {
+				assert.Equal(t, "gauge", m.MType)
+				assert.Equal(t, 77.76, *m.Value)
+				assert.Nil(t, m.Delta)
+			},
+		},
+		{
+			name: "returns error on parsing failure",
+			req: newRequestWithChiParams(http.MethodPost, "/update/counter/bad-counter/abc", map[string]string{
+				"metricsType":  "counter",
+				"metricsName":  "bad-counter",
+				"metricsValue": "abc", // Invalid digits for integer
+			}),
+			expectedID:  "bad-counter",
+			expectErr:   true,
+			expectSaved: false,
+			verify:      nil,
 		},
 	}
 
-	expectedMEtrics := []*models.Metrics{
-		{
-			ID:    "counter-name",
-			MType: "counter",
-			Delta: &[]int64{77}[0],
-		},
-		{
-			ID:    "gauge-name",
-			MType: "gauge",
-			Value: &[]float64{77.76}[0],
-		},
-	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			s := models.NewMemStorage()
+			h := NewHandler(s)
 
-	for i, test := range testCases {
-		h.processMetrics(test.url)
+			// 💡 Fire processMetrics and capture the returned error
+			err := h.processMetrics(tc.req)
 
-		assert.Equal(t, expectedMEtrics[i].ID, h.storage.Metrics[expectedMEtrics[i].ID].ID)
-		assert.Equal(t, expectedMEtrics[i].MType, h.storage.Metrics[expectedMEtrics[i].ID].MType)
+			if tc.expectErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
 
-		switch expectedMEtrics[i].MType {
-		case models.Counter:
-			assert.Equal(t, expectedMEtrics[0].Delta, h.storage.Metrics[expectedMEtrics[0].ID].Delta)
-			assert.Nil(t, h.storage.Metrics[expectedMEtrics[0].ID].Value)
-		case models.Gauge:
-			assert.Equal(t, expectedMEtrics[1].Value, h.storage.Metrics[expectedMEtrics[1].ID].Value)
-			assert.Nil(t, h.storage.Metrics[expectedMEtrics[1].ID].Delta)
-		}
+			metric, getErr := h.storage.GetMetrics(tc.expectedID)
+			if tc.expectSaved {
+				require.NoError(t, getErr)
+				require.NotNil(t, metric)
+				tc.verify(t, metric)
+			} else {
+				assert.Error(t, getErr, "expected metric to not exist in storage")
+				assert.Nil(t, metric)
+			}
+		})
 	}
 }
 
 func TestParseMetrics(t *testing.T) {
-	// Process errors?
-	counterUrl, _ := url.Parse("http://some-address.domain/update/counter/counter-name/77")
-	gaugeUrl, _ := url.Parse("http://some-address.domain/update/gauge/gauge-name/77.76")
-
 	testCases := []struct {
-		name    string
-		url     *url.URL
-		metrics *models.Metrics
+		name      string
+		req       *http.Request
+		expectErr bool
+		verify    func(t *testing.T, result *models.Metrics)
 	}{
 		{
-			name: "URL for counter metrics",
-			url:  counterUrl,
-			metrics: &models.Metrics{
-				ID:    "counter-name",
-				MType: "counter",
-				Delta: &[]int64{77}[0],
+			name: "successfully parses counter metrics",
+			req: newRequestWithChiParams(http.MethodPost, "/update/counter/counter-name/77", map[string]string{
+				"metricsType":  "counter",
+				"metricsName":  "counter-name",
+				"metricsValue": "77",
+			}),
+			expectErr: false,
+			verify: func(t *testing.T, result *models.Metrics) {
+				require.NotNil(t, result)
+				assert.Equal(t, "counter-name", result.ID)
+				assert.Equal(t, "counter", result.MType)
+				assert.Equal(t, int64(77), *result.Delta)
+				assert.Nil(t, result.Value)
 			},
 		},
 		{
-			name: "URL for gauge metrics",
-			url:  gaugeUrl,
-			metrics: &models.Metrics{
-				ID:    "gauge-name",
-				MType: "gauge",
-				Value: &[]float64{77.76}[0],
+			name: "successfully parses gauge metrics",
+			req: newRequestWithChiParams(http.MethodPost, "/update/gauge/gauge-name/77.76", map[string]string{
+				"metricsType":  "gauge",
+				"metricsName":  "gauge-name",
+				"metricsValue": "77.76",
+			}),
+			expectErr: false,
+			verify: func(t *testing.T, result *models.Metrics) {
+				require.NotNil(t, result)
+				assert.Equal(t, "gauge-name", result.ID)
+				assert.Equal(t, "gauge", result.MType)
+				assert.Equal(t, 77.76, *result.Value)
+				assert.Nil(t, result.Delta)
+			},
+		},
+		{
+			name: "returns error for invalid counter integer format",
+			req: newRequestWithChiParams(http.MethodPost, "/update/counter/counter-name/12.34", map[string]string{
+				"metricsType":  "counter",
+				"metricsName":  "counter-name",
+				"metricsValue": "12.34", // Float value into counter
+			}),
+			expectErr: true,
+			verify: func(t *testing.T, result *models.Metrics) {
+				assert.Nil(t, result)
+			},
+		},
+		{
+			name: "returns error for invalid gauge float format",
+			req: newRequestWithChiParams(http.MethodPost, "/update/gauge/gauge-name/not-a-number", map[string]string{
+				"metricsType":  "gauge",
+				"metricsName":  "gauge-name",
+				"metricsValue": "not-a-number",
+			}),
+			expectErr: true,
+			verify: func(t *testing.T, result *models.Metrics) {
+				assert.Nil(t, result)
 			},
 		},
 	}
 
-	for _, test := range testCases {
-		result := parseMetrics(test.url)
-		assert.Equal(t, test.metrics.ID, result.ID)
-		assert.Equal(t, test.metrics.MType, result.MType)
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := parseMetrics(tc.req)
 
-		switch test.metrics.MType {
-		case models.Counter:
-			assert.Equal(t, *test.metrics.Delta, *result.Delta)
-			assert.Nil(t, result.Value)
-		case models.Gauge:
-			assert.Equal(t, *test.metrics.Value, *result.Value)
-			assert.Nil(t, result.Delta)
-		}
+			if tc.expectErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+			tc.verify(t, result)
+		})
 	}
 }

@@ -275,44 +275,47 @@ func findMetric(metrics []*models.Metrics, id string) *models.Metrics {
 	return nil
 }
 
-// func TestCreateURLFromMetric(t *testing.T) {
-// 	testCases := []struct {
-// 		name        string
-// 		m           *models.Metrics
-// 		expectedUrl string
-// 	}{
-// 		{
-// 			name: "Counter metrics",
-// 			m: func() *models.Metrics {
-// 				delta := int64(8)
-// 				return &models.Metrics{
-// 					ID:    "someName",
-// 					MType: models.Counter,
-// 					Delta: &delta,
-// 				}
-// 			}(),
-// 			expectedUrl: a.cfg.ServerAddress + "/update/counter/someName/8",
-// 		},
-// 		{
-// 			name: "Gauge metrics",
-// 			m: func() *models.Metrics {
-// 				value := float64(8.8893)
-// 				return &models.Metrics{
-// 					ID:    "someName",
-// 					MType: models.Gauge,
-// 					Value: &value,
-// 				}
-// 			}(),
-// 			expectedUrl: host + "/update/gauge/someName/8.89",
-// 		},
-// 	}
+func TestCreateURLFromMetric(t *testing.T) {
+	testCases := []struct {
+		name        string
+		m           *models.Metrics
+		expectedUrl string
+	}{
+		{
+			name: "Counter metrics",
+			m: func() *models.Metrics {
+				delta := int64(8)
+				return &models.Metrics{
+					ID:    "someName",
+					MType: models.Counter,
+					Delta: &delta,
+				}
+			}(),
+			expectedUrl: "http://localhost:8080/update/counter/someName/8",
+		},
+		{
+			name: "Gauge metrics",
+			m: func() *models.Metrics {
+				value := float64(8.8893)
+				return &models.Metrics{
+					ID:    "someName",
+					MType: models.Gauge,
+					Value: &value,
+				}
+			}(),
+			expectedUrl: "http://localhost:8080/update/gauge/someName/8.89",
+		},
+	}
+	cfg, err := config.SetAgentConfig([]string{})
+	require.NotNil(t, cfg)
+	require.Nil(t, err)
 
-// 	a := &Agent{host: host}
+	a := NewAgent(cfg)
 
-// 	for _, tc := range testCases {
-// 		t.Run(tc.name, func(t *testing.T) {
-// 			result := a.createURLFromMetric(tc.m)
-// 			assert.Equal(t, tc.expectedUrl, result)
-// 		})
-// 	}
-// }
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			result := a.createURLFromMetric(tc.m)
+			assert.Equal(t, tc.expectedUrl, result)
+		})
+	}
+}

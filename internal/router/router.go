@@ -15,7 +15,7 @@ func PrepareServerRouterAndConfig() (*chi.Mux, *config.ServerConfig, error) {
 		return nil, nil, err
 	}
 
-	storage := models.NewStorage()
+	storage := models.NewMemStorage()
 	h := handler.NewHandler(storage)
 	r := chi.NewRouter()
 

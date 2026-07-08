@@ -3,21 +3,26 @@ package models
 import (
 	"errors"
 	"fmt"
-	"net/http"
+	"io"
 	"sort"
 	"text/tabwriter"
 )
+
+type Storage interface {
+	GetMetrics(string) (*Metrics, error)
+	ListMetrics(io.Writer)
+	SaveMetrics(*Metrics) error
+}
 
 type MemStorage struct {
 	Metrics map[string]*Metrics
 }
 
-var (
-	errMetricsNotFound = errors.New("metrics not found")
-	noMetricsMessage   = "Currently there are no metrics to display\n"
-)
+const noMetricsMessage = "Currently there are no metrics to display\n"
 
-func NewStorage() *MemStorage {
+var errMetricsNotFound = errors.New("metrics not found")
+
+func NewMemStorage() *MemStorage {
 	return &MemStorage{
 		Metrics: make(map[string]*Metrics),
 	}
@@ -32,17 +37,26 @@ func (ms *MemStorage) GetMetrics(name string) (*Metrics, error) {
 	return metrics, nil
 }
 
-func (ms *MemStorage) UpdateMetrics(m *Metrics) {
+func (ms *MemStorage) SaveMetrics(m *Metrics) error {
+	current, existing := ms.Metrics[m.ID]
+	if !existing {
+		ms.Metrics[m.ID] = m
+		return nil
+	}
+
 	switch m.MType {
 	case Counter:
-		newValue := *ms.Metrics[m.ID].Delta + *m.Delta
-		ms.Metrics[m.ID].Delta = &newValue
+		newValue := *current.Delta + *m.Delta
+		current.Delta = &newValue
 	case Gauge:
-		ms.Metrics[m.ID].Value = m.Value
+		current.Value = m.Value
+	default:
+		return errIncorrectMetricsType
 	}
+	return nil
 }
 
-func (ms *MemStorage) ListMetrics(w http.ResponseWriter) {
+func (ms *MemStorage) ListMetrics(w io.Writer) {
 	if len(ms.Metrics) == 0 {
 		w.Write([]byte(noMetricsMessage))
 		return
