@@ -1,6 +1,9 @@
 package config
 
-import "flag"
+import (
+	"flag"
+	"os"
+)
 
 type ServerConfig struct {
 	ServerAddress string
@@ -9,6 +12,7 @@ type ServerConfig struct {
 const (
 	serverAddressFlag = "a"
 	defaultAddress    = "localhost:8080"
+	envAddress        = "ADDRESS"
 )
 
 func newServerConfig(addr string) *ServerConfig {
@@ -19,11 +23,20 @@ func newServerConfig(addr string) *ServerConfig {
 
 func SetServerConfig(args []string) (*ServerConfig, error) {
 	fs := flag.NewFlagSet("server", flag.ContinueOnError)
-	address := fs.String(serverAddressFlag, defaultAddress, "Metrics server HTTP address")
-	err := fs.Parse(args)
+	address := fs.String(serverAddressFlag, defaultAddress, "Metrics server HTTP address and port")
 
+	err := fs.Parse(args)
 	if err != nil {
 		return nil, err
 	}
+
+	// Rewrite config with env variable if any
+	if envAddr := getEnvAddrVariable(); envAddr != "" {
+		address = &envAddr
+	}
 	return newServerConfig(*address), nil
+}
+
+func getEnvAddrVariable() string {
+	return os.Getenv(envAddress)
 }

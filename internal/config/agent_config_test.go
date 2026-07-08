@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// TODO: update tests for env variables
 func TestSetAgentConfig(t *testing.T) {
 	testCases := []struct {
 		name       string

@@ -3,13 +3,16 @@ package config
 import (
 	"errors"
 	"flag"
+	"log"
 	"time"
+
+	"github.com/caarlos0/env/v6"
 )
 
 type AgentConfig struct {
-	ServerAddress  string
-	ReportInterval time.Duration
-	PollInterval   time.Duration
+	ServerAddress  string        `env:"ADDRESS"`
+	ReportInterval time.Duration `env:"REPORT_INTERVAL"`
+	PollInterval   time.Duration `env:"POLL_INTERVAL"`
 }
 
 const (
@@ -32,6 +35,44 @@ func newAgentConfig(addr string, repInt, pollInt time.Duration) *AgentConfig {
 }
 
 func SetAgentConfig(args []string) (*AgentConfig, error) {
+	// To think about: the priority, currently the errors in flag values breaks the configuration biuld even if env variables set correctly.
+	flagConfig, err := createFlagConfig(args)
+	if err != nil {
+		return nil, err
+	}
+
+	cfg, err := createConfig(flagConfig)
+	if err != nil {
+		return nil, err
+	}
+
+	log.Printf("Set server address to %s\n", cfg.ServerAddress)
+	log.Printf("Set report interval to %v\n", cfg.ReportInterval)
+	log.Printf("Set poll interval to %v\n", cfg.PollInterval)
+	return cfg, nil
+}
+
+func createConfig(cfg *AgentConfig) (*AgentConfig, error) {
+	envConfig := AgentConfig{}
+	err := readEnvVariables(&envConfig)
+	if err != nil {
+		return nil, err
+	}
+
+	if envConfig.ServerAddress != "" {
+		cfg.ServerAddress = envConfig.ServerAddress
+	}
+	if envConfig.ReportInterval != 0 {
+		cfg.ReportInterval = envConfig.ReportInterval
+	}
+	if envConfig.PollInterval != 0 {
+		cfg.PollInterval = envConfig.PollInterval
+	}
+
+	return cfg, nil
+}
+
+func createFlagConfig(args []string) (*AgentConfig, error) {
 	fs := flag.NewFlagSet("agent", flag.ContinueOnError)
 	address := fs.String(servAddressFlag, defaultServerAddress, "Metrics server HTTP address")
 	reportSeconds := fs.Int(reportIntervalFlag, defaultReportInterval, "Metrics report frequency (seconds)")
@@ -49,7 +90,17 @@ func SetAgentConfig(args []string) (*AgentConfig, error) {
 
 	reportInterval := time.Duration(*reportSeconds) * time.Second
 	pollInterval := time.Duration(*pollSeconds) * time.Second
+
 	return newAgentConfig(*address, reportInterval, pollInterval), nil
+}
+
+func readEnvVariables(cfg *AgentConfig) error {
+	err := env.Parse(cfg)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func validateIntervals(rInt, pInt int) error {
