@@ -12,7 +12,7 @@ type ServerConfig struct {
 
 const (
 	serverAddressFlag = "a"
-	defaultAddress    = ":8080"
+	defaultAddress    = "localhost:8080"
 	envAddress        = "ADDRESS"
 )
 
@@ -32,12 +32,14 @@ func SetServerConfig(args []string) (*ServerConfig, error) {
 	}
 
 	addr := *address
-	if strings.HasPrefix(addr, "localhost:") {
-		addr = strings.TrimPrefix(addr, "localhost")
-	}
+
 	// Rewrite config with env variable if any
 	if envAddr := getEnvAddrVariable(); envAddr != "" {
 		addr = envAddr
+	}
+
+	if strings.HasPrefix(addr, "localhost:") {
+		addr = strings.TrimPrefix(addr, "localhost")
 	}
 	return newServerConfig(addr), nil
 }
