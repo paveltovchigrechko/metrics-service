@@ -10,9 +10,15 @@ import (
 )
 
 type AgentConfig struct {
-	ServerAddress  string        `env:"ADDRESS"`
-	ReportInterval time.Duration `env:"REPORT_INTERVAL"`
-	PollInterval   time.Duration `env:"POLL_INTERVAL"`
+	ServerAddress  string
+	ReportInterval time.Duration
+	PollInterval   time.Duration
+}
+
+type envConfig struct {
+	serverAddress  string `env:"ADDRESS"`
+	reportInterval int    `env:"REPORT_INTERVAL"`
+	pollInterval   int    `env:"POLL_INTERVAL"`
 }
 
 const (
@@ -53,20 +59,20 @@ func SetAgentConfig(args []string) (*AgentConfig, error) {
 }
 
 func createConfig(cfg *AgentConfig) (*AgentConfig, error) {
-	envConfig := AgentConfig{}
+	envConfig := envConfig{}
 	err := readEnvVariables(&envConfig)
 	if err != nil {
 		return nil, err
 	}
 
-	if envConfig.ServerAddress != "" {
-		cfg.ServerAddress = envConfig.ServerAddress
+	if envConfig.serverAddress != "" {
+		cfg.ServerAddress = envConfig.serverAddress
 	}
-	if envConfig.ReportInterval != 0 {
-		cfg.ReportInterval = envConfig.ReportInterval
+	if envConfig.reportInterval != 0 {
+		cfg.ReportInterval = time.Duration(envConfig.reportInterval) * time.Second
 	}
-	if envConfig.PollInterval != 0 {
-		cfg.PollInterval = envConfig.PollInterval
+	if envConfig.pollInterval != 0 {
+		cfg.PollInterval = time.Duration(envConfig.pollInterval) * time.Second
 	}
 
 	return cfg, nil
@@ -94,7 +100,7 @@ func createFlagConfig(args []string) (*AgentConfig, error) {
 	return newAgentConfig(*address, reportInterval, pollInterval), nil
 }
 
-func readEnvVariables(cfg *AgentConfig) error {
+func readEnvVariables(cfg *envConfig) error {
 	err := env.Parse(cfg)
 	if err != nil {
 		return err
