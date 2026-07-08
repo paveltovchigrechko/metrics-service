@@ -16,9 +16,9 @@ type AgentConfig struct {
 }
 
 type envConfig struct {
-	serverAddress  string `env:"ADDRESS"`
-	reportInterval int    `env:"REPORT_INTERVAL"`
-	pollInterval   int    `env:"POLL_INTERVAL"`
+	ServerAddress  string `env:"ADDRESS"`
+	ReportInterval int    `env:"REPORT_INTERVAL"`
+	PollInterval   int    `env:"POLL_INTERVAL"`
 }
 
 const (
@@ -65,14 +65,14 @@ func createConfig(cfg *AgentConfig) (*AgentConfig, error) {
 		return nil, err
 	}
 
-	if envConfig.serverAddress != "" {
-		cfg.ServerAddress = envConfig.serverAddress
+	if envConfig.ServerAddress != "" {
+		cfg.ServerAddress = envConfig.ServerAddress
 	}
-	if envConfig.reportInterval != 0 {
-		cfg.ReportInterval = time.Duration(envConfig.reportInterval) * time.Second
+	if envConfig.ReportInterval != 0 {
+		cfg.ReportInterval = time.Duration(envConfig.ReportInterval) * time.Second
 	}
-	if envConfig.pollInterval != 0 {
-		cfg.PollInterval = time.Duration(envConfig.pollInterval) * time.Second
+	if envConfig.PollInterval != 0 {
+		cfg.PollInterval = time.Duration(envConfig.PollInterval) * time.Second
 	}
 
 	return cfg, nil

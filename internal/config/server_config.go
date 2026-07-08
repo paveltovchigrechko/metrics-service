@@ -3,7 +3,6 @@ package config
 import (
 	"flag"
 	"os"
-	"strings"
 )
 
 type ServerConfig struct {
@@ -38,9 +37,6 @@ func SetServerConfig(args []string) (*ServerConfig, error) {
 		addr = envAddr
 	}
 
-	if strings.HasPrefix(addr, "localhost:") {
-		addr = strings.TrimPrefix(addr, "localhost")
-	}
 	return newServerConfig(addr), nil
 }
 
