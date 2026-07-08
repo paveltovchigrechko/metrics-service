@@ -1,9 +1,15 @@
 package models
 
+import (
+	"errors"
+)
+
 const (
 	Counter = "counter"
 	Gauge   = "gauge"
 )
+
+var errIncorrectMetricsType = errors.New("Incorrect metrics type")
 
 // NOTE: Не усложняем пример, вводя иерархическую вложенность структур.
 // Органичиваясь плоской моделью.
@@ -16,4 +22,21 @@ type Metrics struct {
 	Delta *int64   `json:"delta,omitempty"`
 	Value *float64 `json:"value,omitempty"`
 	Hash  string   `json:"hash,omitempty"`
+}
+
+func CreateMetrics(name, mtype string, delta int64, value float64) (*Metrics, error) {
+	m := &Metrics{}
+	m.ID = name
+	m.MType = mtype
+
+	switch mtype {
+	case Counter:
+		m.Delta = &delta
+	case Gauge:
+		m.Value = &value
+	default:
+		return nil, errIncorrectMetricsType
+	}
+
+	return m, nil
 }
