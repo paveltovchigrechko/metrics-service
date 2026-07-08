@@ -16,8 +16,9 @@ func run() {
 	if err != nil {
 		log.Fatal(err)
 	}
-
+	log.Printf("Starting server on %s", cfg.ServerAddress)
 	err = http.ListenAndServe(cfg.ServerAddress, r)
+	log.Printf("ListenAndServe returned: %v", err)
 	if err != nil {
 		log.Fatal(err)
 	}

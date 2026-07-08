@@ -30,11 +30,12 @@ func SetServerConfig(args []string) (*ServerConfig, error) {
 		return nil, err
 	}
 
+	addr := *address
 	// Rewrite config with env variable if any
 	if envAddr := getEnvAddrVariable(); envAddr != "" {
-		address = &envAddr
+		addr = envAddr
 	}
-	return newServerConfig(*address), nil
+	return newServerConfig(addr), nil
 }
 
 func getEnvAddrVariable() string {
