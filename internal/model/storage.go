@@ -9,7 +9,7 @@ import (
 )
 
 type Storage interface {
-	GetMetrics(string) (*Metrics, error)
+	GetMetrics(string, string) (*Metrics, error)
 	ListMetrics(io.Writer)
 	SaveMetrics(*Metrics) error
 }
@@ -28,8 +28,9 @@ func NewMemStorage() *MemStorage {
 	}
 }
 
-func (ms *MemStorage) GetMetrics(name string) (*Metrics, error) {
-	metrics, ok := ms.Metrics[name]
+func (ms *MemStorage) GetMetrics(name, mType string) (*Metrics, error) {
+	id := mType + ":" + name
+	metrics, ok := ms.Metrics[id]
 	if !ok {
 		return nil, errMetricsNotFound
 	}
@@ -38,6 +39,10 @@ func (ms *MemStorage) GetMetrics(name string) (*Metrics, error) {
 }
 
 func (ms *MemStorage) SaveMetrics(m *Metrics) error {
+	if m.MType != Counter && m.MType != Gauge {
+		return errIncorrectMetricsType
+	}
+
 	current, existing := ms.Metrics[m.ID]
 	if !existing {
 		ms.Metrics[m.ID] = m

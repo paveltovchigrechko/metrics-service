@@ -17,21 +17,23 @@ func TestNewStorage(t *testing.T) {
 func TestMemStorage_SaveAndGetMetrics(t *testing.T) {
 	testCases := []struct {
 		name          string
-		initialState  map[string]*Metrics                             // The MemStorage state before the test
-		inputMetric   *Metrics                                        // The metric passed to SaveMetrics
-		searchID      string                                          // The ID passed to GetMetrics afterwards
-		expectedError error                                           // Error expected from SaveMetrics or GetMetrics
-		verifyState   func(t *testing.T, res *Metrics, s *MemStorage) // Custom validations for each test case
+		initialState  map[string]*Metrics
+		inputMetric   *Metrics
+		searchName    string
+		searchType    string
+		expectedError error
+		verifyState   func(t *testing.T, res *Metrics, s *MemStorage)
 	}{
 		{
 			name:         "SaveMetrics inserts a brand new counter",
 			initialState: map[string]*Metrics{},
 			inputMetric: &Metrics{
-				ID:    "PollCount",
+				ID:    "counter:PollCount",
 				MType: Counter,
 				Delta: ptr(int64(5)),
 			},
-			searchID:      "PollCount",
+			searchName:    "PollCount",
+			searchType:    Counter,
 			expectedError: nil,
 			verifyState: func(t *testing.T, res *Metrics, s *MemStorage) {
 				require.NotNil(t, res)
@@ -42,11 +44,12 @@ func TestMemStorage_SaveAndGetMetrics(t *testing.T) {
 			name:         "SaveMetrics inserts a brand new gauge",
 			initialState: map[string]*Metrics{},
 			inputMetric: &Metrics{
-				ID:    "Alloc",
+				ID:    "gauge:Alloc",
 				MType: Gauge,
 				Value: ptr(123.45),
 			},
-			searchID:      "Alloc",
+			searchName:    "Alloc",
+			searchType:    Gauge,
 			expectedError: nil,
 			verifyState: func(t *testing.T, res *Metrics, s *MemStorage) {
 				require.NotNil(t, res)
@@ -56,14 +59,15 @@ func TestMemStorage_SaveAndGetMetrics(t *testing.T) {
 		{
 			name: "SaveMetrics accumulates an existing counter",
 			initialState: map[string]*Metrics{
-				"PollCount": {ID: "PollCount", MType: Counter, Delta: ptr(int64(10))},
+				"counter:PollCount": {ID: "counter:PollCount", MType: Counter, Delta: ptr(int64(10))},
 			},
 			inputMetric: &Metrics{
-				ID:    "PollCount",
+				ID:    "counter:PollCount",
 				MType: Counter,
 				Delta: ptr(int64(5)),
 			},
-			searchID:      "PollCount",
+			searchName:    "PollCount",
+			searchType:    Counter,
 			expectedError: nil,
 			verifyState: func(t *testing.T, res *Metrics, s *MemStorage) {
 				require.NotNil(t, res)
@@ -73,14 +77,15 @@ func TestMemStorage_SaveAndGetMetrics(t *testing.T) {
 		{
 			name: "SaveMetrics overrides an existing gauge",
 			initialState: map[string]*Metrics{
-				"Alloc": {ID: "Alloc", MType: Gauge, Value: ptr(50.0)},
+				"gauge:Alloc": {ID: "gauge:Alloc", MType: Gauge, Value: ptr(50.0)},
 			},
 			inputMetric: &Metrics{
-				ID:    "Alloc",
+				ID:    "gauge:Alloc",
 				MType: Gauge,
 				Value: ptr(99.9),
 			},
-			searchID:      "Alloc",
+			searchName:    "Alloc",
+			searchType:    Gauge,
 			expectedError: nil,
 			verifyState: func(t *testing.T, res *Metrics, s *MemStorage) {
 				require.NotNil(t, res)
@@ -90,13 +95,14 @@ func TestMemStorage_SaveAndGetMetrics(t *testing.T) {
 		{
 			name: "SaveMetrics returns error on invalid type when metric exists",
 			initialState: map[string]*Metrics{
-				"BadMetric": {ID: "BadMetric", MType: Counter, Delta: ptr(int64(10))},
+				"unsupported_type:BadMetric": {ID: "unsupported_type:BadMetric", MType: Counter, Delta: ptr(int64(10))},
 			},
 			inputMetric: &Metrics{
 				ID:    "BadMetric",
 				MType: "unsupported_type",
 			},
-			searchID:      "BadMetric",
+			searchName:    "BadMetric",
+			searchType:    "unsupported_type",
 			expectedError: errIncorrectMetricsType,
 			verifyState: func(t *testing.T, res *Metrics, s *MemStorage) {
 				require.NotNil(t, res)
@@ -107,7 +113,8 @@ func TestMemStorage_SaveAndGetMetrics(t *testing.T) {
 			name:          "GetMetrics returns an error for non-existent metric",
 			initialState:  map[string]*Metrics{},
 			inputMetric:   nil,
-			searchID:      "MissingMetric",
+			searchName:    "MissingMetric",
+			searchType:    Counter,
 			expectedError: errMetricsNotFound,
 			verifyState: func(t *testing.T, res *Metrics, s *MemStorage) {
 				assert.Nil(t, res)
@@ -131,7 +138,7 @@ func TestMemStorage_SaveAndGetMetrics(t *testing.T) {
 				}
 			}
 
-			res, err := s.GetMetrics(tc.searchID)
+			res, err := s.GetMetrics(tc.searchName, tc.searchType)
 			if tc.expectedError != nil && tc.expectedError == errMetricsNotFound {
 				assert.ErrorIs(t, err, tc.expectedError)
 			} else {

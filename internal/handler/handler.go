@@ -66,7 +66,8 @@ func (h *AppHandler) MetricsValue(w http.ResponseWriter, req *http.Request) {
 	}
 
 	metricsName := chi.URLParam(req, "metricsName")
-	metrics, err := h.storage.GetMetrics(metricsName)
+	metricsType := chi.URLParam(req, "metricsType")
+	metrics, err := h.storage.GetMetrics(metricsName, metricsType)
 	if err != nil {
 		w.WriteHeader(http.StatusNotFound)
 		return
@@ -94,9 +95,10 @@ func (h *AppHandler) processMetrics(req *http.Request) error {
 // This function assumes the input url.Url passed validateReqPath().
 func parseMetrics(req *http.Request) (*models.Metrics, error) {
 	metricType, metricName, metricValue := chi.URLParam(req, "metricsType"), chi.URLParam(req, "metricsName"), chi.URLParam(req, "metricsValue")
+	metricID := metricType + ":" + metricName
 	// check for empty strings?
 	m := models.Metrics{
-		ID:    metricName,
+		ID:    metricID,
 		MType: metricType,
 	}
 

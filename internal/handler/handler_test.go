@@ -138,12 +138,13 @@ func TestPostMetrics(t *testing.T) {
 
 func TestProcessMetrics(t *testing.T) {
 	testCases := []struct {
-		name        string
-		req         *http.Request
-		expectedID  string
-		expectErr   bool
-		expectSaved bool
-		verify      func(t *testing.T, m *models.Metrics)
+		name         string
+		req          *http.Request
+		expectedName string
+		expectedType string
+		expectErr    bool
+		expectSaved  bool
+		verify       func(t *testing.T, m *models.Metrics)
 	}{
 		{
 			name: "processes valid counter metric successfully",
@@ -152,9 +153,10 @@ func TestProcessMetrics(t *testing.T) {
 				"metricsName":  "counter-name",
 				"metricsValue": "77",
 			}),
-			expectedID:  "counter-name",
-			expectErr:   false,
-			expectSaved: true,
+			expectedName: "counter-name",
+			expectedType: "counter",
+			expectErr:    false,
+			expectSaved:  true,
 			verify: func(t *testing.T, m *models.Metrics) {
 				assert.Equal(t, "counter", m.MType)
 				assert.Equal(t, int64(77), *m.Delta)
@@ -168,9 +170,10 @@ func TestProcessMetrics(t *testing.T) {
 				"metricsName":  "gauge-name",
 				"metricsValue": "77.76",
 			}),
-			expectedID:  "gauge-name",
-			expectErr:   false,
-			expectSaved: true,
+			expectedName: "gauge-name",
+			expectedType: "gauge",
+			expectErr:    false,
+			expectSaved:  true,
 			verify: func(t *testing.T, m *models.Metrics) {
 				assert.Equal(t, "gauge", m.MType)
 				assert.Equal(t, 77.76, *m.Value)
@@ -184,10 +187,11 @@ func TestProcessMetrics(t *testing.T) {
 				"metricsName":  "bad-counter",
 				"metricsValue": "abc", // Invalid digits for integer
 			}),
-			expectedID:  "bad-counter",
-			expectErr:   true,
-			expectSaved: false,
-			verify:      nil,
+			expectedName: "bad-counter",
+			expectedType: "counter",
+			expectErr:    true,
+			expectSaved:  false,
+			verify:       nil,
 		},
 	}
 
@@ -196,7 +200,6 @@ func TestProcessMetrics(t *testing.T) {
 			s := models.NewMemStorage()
 			h := NewHandler(s)
 
-			// 💡 Fire processMetrics and capture the returned error
 			err := h.processMetrics(tc.req)
 
 			if tc.expectErr {
@@ -205,7 +208,7 @@ func TestProcessMetrics(t *testing.T) {
 				assert.NoError(t, err)
 			}
 
-			metric, getErr := h.storage.GetMetrics(tc.expectedID)
+			metric, getErr := h.storage.GetMetrics(tc.expectedName, tc.expectedType)
 			if tc.expectSaved {
 				require.NoError(t, getErr)
 				require.NotNil(t, metric)
@@ -235,7 +238,7 @@ func TestParseMetrics(t *testing.T) {
 			expectErr: false,
 			verify: func(t *testing.T, result *models.Metrics) {
 				require.NotNil(t, result)
-				assert.Equal(t, "counter-name", result.ID)
+				assert.Equal(t, "counter:counter-name", result.ID)
 				assert.Equal(t, "counter", result.MType)
 				assert.Equal(t, int64(77), *result.Delta)
 				assert.Nil(t, result.Value)
@@ -251,7 +254,7 @@ func TestParseMetrics(t *testing.T) {
 			expectErr: false,
 			verify: func(t *testing.T, result *models.Metrics) {
 				require.NotNil(t, result)
-				assert.Equal(t, "gauge-name", result.ID)
+				assert.Equal(t, "gauge:gauge-name", result.ID)
 				assert.Equal(t, "gauge", result.MType)
 				assert.Equal(t, 77.76, *result.Value)
 				assert.Nil(t, result.Delta)
