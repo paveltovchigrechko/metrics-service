@@ -14,26 +14,26 @@ type (
 	}
 
 	loggingResponseWriter struct {
-		http.ResponseWriter
-		responseData *responseData
+		http.ResponseWriter               // This http.ResponseWriter is used in our handler.
+		responseData        *responseData // Additional structure to save response status and size.
 	}
 )
 
 func (r *loggingResponseWriter) Write(b []byte) (int, error) {
-	if r.responseData.status == 0 {
+	if r.responseData.status == 0 { // Set StatusOK if we writing something to the response.
 		r.WriteHeader(http.StatusOK)
 	}
-	size, err := r.ResponseWriter.Write(b)
+	size, err := r.ResponseWriter.Write(b) // We use the underline original http.ResponseWriter here!
 	r.responseData.size += size
 	return size, err
 }
 
 func (r *loggingResponseWriter) WriteHeader(statusCode int) {
-	if r.responseData.status != 0 {
+	if r.responseData.status != 0 { // If we have status already, discard the following.
 		return
 	}
-	r.ResponseWriter.WriteHeader(statusCode)
 	r.responseData.status = statusCode
+	r.ResponseWriter.WriteHeader(statusCode) // We use the underline original http.ResponseWriter here!
 }
 
 func New() (*zap.SugaredLogger, error) {
@@ -48,7 +48,7 @@ func New() (*zap.SugaredLogger, error) {
 }
 
 func Middleware(log *zap.SugaredLogger) func(http.Handler) http.Handler {
-	return func(next http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler { // This function is basically a cast to get the required signature for func (mx *chi.Mux) Use(middlewares ...func(http.Handler) http.Handler)
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			start := time.Now()
 
@@ -61,7 +61,7 @@ func Middleware(log *zap.SugaredLogger) func(http.Handler) http.Handler {
 				responseData:   responseData,
 			}
 
-			next.ServeHTTP(&lw, r)
+			next.ServeHTTP(&lw, r) // Hand the request to the actual handler with out wrapper-writer
 
 			duration := time.Since(start)
 

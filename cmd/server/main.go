@@ -25,11 +25,11 @@ func run() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer l.Sync()
+	defer l.Sync() // Flush at the end
 
 	r := chi.NewRouter()
-	r.Use(logger.Middleware(l))
-	router.SetRoutes(r)
+	r.Use(logger.Middleware(l)) // Set middleware before setting handlers
+	router.SetRoutes(r)         // Set handlers
 
 	err = http.ListenAndServe(cfg.ServerAddress, r)
 	if err != nil {
