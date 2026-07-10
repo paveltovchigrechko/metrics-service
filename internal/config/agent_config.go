@@ -70,9 +70,13 @@ func createConfig(cfg *AgentConfig) (*AgentConfig, error) {
 	}
 	if envConfig.ReportInterval != 0 {
 		cfg.ReportInterval = time.Duration(envConfig.ReportInterval) * time.Second
+	} else if envConfig.ReportInterval < 0 {
+		return nil, errIncorrectInterval
 	}
 	if envConfig.PollInterval != 0 {
 		cfg.PollInterval = time.Duration(envConfig.PollInterval) * time.Second
+	} else if envConfig.PollInterval < 0 {
+		return nil, errIncorrectInterval
 	}
 
 	return cfg, nil
