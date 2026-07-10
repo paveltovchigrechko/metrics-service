@@ -95,14 +95,14 @@ func TestMemStorage_SaveAndGetMetrics(t *testing.T) {
 		{
 			name: "SaveMetrics returns error on invalid type when metric exists",
 			initialState: map[string]*Metrics{
-				"unsupported_type:BadMetric": {ID: "unsupported_type:BadMetric", MType: Counter, Delta: ptr(int64(10))},
+				"counter:BadMetric": {ID: "counter:BadMetric", MType: Counter, Delta: ptr(int64(10))},
 			},
 			inputMetric: &Metrics{
-				ID:    "BadMetric",
+				ID:    "unsupported_type:BadMetric",
 				MType: "unsupported_type",
 			},
 			searchName:    "BadMetric",
-			searchType:    "unsupported_type",
+			searchType:    Counter,
 			expectedError: errIncorrectMetricsType,
 			verifyState: func(t *testing.T, res *Metrics, s *MemStorage) {
 				require.NotNil(t, res)
@@ -118,6 +118,29 @@ func TestMemStorage_SaveAndGetMetrics(t *testing.T) {
 			expectedError: errMetricsNotFound,
 			verifyState: func(t *testing.T, res *Metrics, s *MemStorage) {
 				assert.Nil(t, res)
+			},
+		},
+		{
+			name: "SaveMetrics allows two metrics with the same name but different types",
+			initialState: map[string]*Metrics{
+				"gauge:Alloc": {ID: "gauge:Alloc", MType: Gauge, Value: ptr(55.5)},
+			},
+			inputMetric: &Metrics{
+				ID:    "counter:Alloc",
+				MType: Counter,
+				Delta: ptr(int64(10)),
+			},
+			searchName:    "Alloc",
+			searchType:    Counter, // We search for the newly added counter
+			expectedError: nil,
+			verifyState: func(t *testing.T, res *Metrics, s *MemStorage) {
+				require.NotNil(t, res)
+				assert.Equal(t, int64(10), *res.Delta)
+
+				gaugeRes, err := s.GetMetrics("Alloc", Gauge)
+				require.NoError(t, err)
+				require.NotNil(t, gaugeRes)
+				assert.Equal(t, 55.5, *gaugeRes.Value)
 			},
 		},
 	}
