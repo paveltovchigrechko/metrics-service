@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"math"
@@ -57,8 +58,7 @@ type Agent struct {
 func NewAgent(cfg *config.AgentConfig) *Agent {
 	m := new(runtime.MemStats)
 	c := resty.New().
-		SetTimeout(cfg.PollInterval).
-		SetHeader("Content-Type", contentType)
+		SetTimeout(cfg.PollInterval)
 
 	return &Agent{
 		m:           m,
@@ -70,7 +70,7 @@ func NewAgent(cfg *config.AgentConfig) *Agent {
 }
 
 func (a *Agent) Run() {
-	// time.Ticker was suggested by AI
+	// time.Ticker was suggested by AI``
 	pollTicker := time.NewTicker(a.cfg.PollInterval)
 	reportTicker := time.NewTicker(a.cfg.ReportInterval)
 
@@ -81,7 +81,8 @@ func (a *Agent) Run() {
 			a.updateMetrics()
 		case <-reportTicker.C:
 			metrics := a.buildMetrics()
-			err := a.sendMetrics(metrics)
+			// err := a.sendMetrics(metrics)
+			err := a.sendMetricsJSON(metrics)
 			if err != nil {
 				log.Print(err)
 			}
@@ -341,6 +342,7 @@ func (a *Agent) buildMetrics() []*models.Metrics {
 }
 
 func (a *Agent) sendMetrics(metrics []*models.Metrics) error {
+	a.client.R().SetHeader("Content-Type", contentType)
 	for _, m := range metrics {
 		url := a.createURLFromMetric(m)
 		_, err := a.client.R().Post(url)
@@ -350,6 +352,25 @@ func (a *Agent) sendMetrics(metrics []*models.Metrics) error {
 
 	}
 	// Should we reset a.PollCount here?
+	return nil
+}
+
+func (a *Agent) sendMetricsJSON(metrics []*models.Metrics) error {
+	for _, m := range metrics {
+		encodedMetrics, err := json.Marshal(m)
+		if err != nil {
+			return err
+		}
+
+		_, err = a.client.R().SetHeader("Content-Type", "application/json").
+			SetBody(encodedMetrics).
+			Post("http://" + a.cfg.ServerAddress + "/update")
+
+		if err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
