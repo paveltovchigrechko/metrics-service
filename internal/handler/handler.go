@@ -168,10 +168,9 @@ func (h *AppHandler) processMetrics(req *http.Request) error {
 // This function assumes the input url.Url passed validateReqPath().
 func parseMetrics(req *http.Request) (*models.Metrics, error) {
 	metricsType, metricsName, metricsValue := chi.URLParam(req, "metricsType"), chi.URLParam(req, "metricsName"), chi.URLParam(req, "metricsValue")
-	metricsID := metricsType + ":" + metricsName
 	// check for empty strings?
 	m := models.Metrics{
-		ID:    metricsID,
+		ID:    metricsName,
 		MType: metricsType,
 	}
 

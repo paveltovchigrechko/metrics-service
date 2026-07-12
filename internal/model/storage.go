@@ -34,7 +34,6 @@ func NewMemStorage() *MemStorage {
 
 func (ms *MemStorage) GetMetrics(name, mtype string) (*Metrics, error) {
 	key := metricKey(name, mtype)
-
 	metrics, ok := ms.Metrics[key]
 	if !ok {
 		return nil, errMetricsNotFound
