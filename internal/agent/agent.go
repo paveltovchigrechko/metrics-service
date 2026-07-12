@@ -81,7 +81,7 @@ func (a *Agent) Run() {
 			a.updateMetrics()
 		case <-reportTicker.C:
 			metrics := a.buildMetrics()
-			// err := a.sendMetrics(metrics)
+			// err := a.sendMetrics(metrics) // Add configuration option for agent to use one of available sending methods.
 			err := a.sendMetricsJSON(metrics)
 			if err != nil {
 				log.Print(err)

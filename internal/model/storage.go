@@ -103,5 +103,5 @@ func (ms *MemStorage) ListMetrics(w io.Writer) {
 }
 
 func metricKey(name, mtype string) string {
-	return name + ":" + mtype
+	return mtype + ":" + name
 }
