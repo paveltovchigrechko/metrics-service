@@ -9,7 +9,7 @@ import (
 )
 
 type Storage interface {
-	GetMetrics(string) (*Metrics, error)
+	GetMetrics(string, string) (*Metrics, error)
 	ListMetrics(io.Writer)
 	SaveMetrics(*Metrics) error
 }
@@ -20,7 +20,11 @@ type MemStorage struct {
 
 const noMetricsMessage = "Currently there are no metrics to display\n"
 
-var errMetricsNotFound = errors.New("metrics not found")
+var (
+	errMetricsNotFound = errors.New("metrics not found")
+	errDeltaIsNil      = errors.New("counter metrics delta is nil")
+	errValueIsNil      = errors.New("gauge metrics value is nil")
+)
 
 func NewMemStorage() *MemStorage {
 	return &MemStorage{
@@ -28,8 +32,10 @@ func NewMemStorage() *MemStorage {
 	}
 }
 
-func (ms *MemStorage) GetMetrics(id string) (*Metrics, error) {
-	metrics, ok := ms.Metrics[id]
+func (ms *MemStorage) GetMetrics(name, mtype string) (*Metrics, error) {
+	key := metricKey(name, mtype)
+
+	metrics, ok := ms.Metrics[key]
 	if !ok {
 		return nil, errMetricsNotFound
 	}
@@ -42,17 +48,24 @@ func (ms *MemStorage) SaveMetrics(m *Metrics) error {
 		return errIncorrectMetricsType
 	}
 
-	current, existing := ms.Metrics[m.ID]
+	key := metricKey(m.ID, m.MType)
+	current, existing := ms.Metrics[key]
 	if !existing {
-		ms.Metrics[m.ID] = m
+		ms.Metrics[key] = m
 		return nil
 	}
 
 	switch m.MType {
 	case Counter:
+		if m.Delta == nil {
+			return errDeltaIsNil
+		}
 		newValue := *current.Delta + *m.Delta
 		current.Delta = &newValue
 	case Gauge:
+		if m.Value == nil {
+			return errValueIsNil
+		}
 		current.Value = m.Value
 	default:
 		return errIncorrectMetricsType
@@ -87,4 +100,8 @@ func (ms *MemStorage) ListMetrics(w io.Writer) {
 			fmt.Fprintf(tw, "%s\t%.2f\n", ms.Metrics[name].ID, *ms.Metrics[name].Value)
 		}
 	}
+}
+
+func metricKey(name, mtype string) string {
+	return name + ":" + mtype
 }

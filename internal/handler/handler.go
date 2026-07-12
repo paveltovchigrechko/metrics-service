@@ -72,8 +72,7 @@ func (h *AppHandler) MetricsValue(w http.ResponseWriter, req *http.Request) {
 
 	metricsName := chi.URLParam(req, "metricsName")
 	metricsType := chi.URLParam(req, "metricsType")
-	metricsID := metricsType + ":" + metricsName
-	metrics, err := h.storage.GetMetrics(metricsID)
+	metrics, err := h.storage.GetMetrics(metricsName, metricsType)
 	if err != nil {
 		w.WriteHeader(http.StatusNotFound)
 		return
@@ -112,6 +111,48 @@ func (h *AppHandler) UpdateEndpoint(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusOK)
+}
+
+func (h *AppHandler) ValueEndpoint(w http.ResponseWriter, req *http.Request) {
+	if err := validateReqContentType(req, applicationJSON); err != nil {
+		writeError(w, err, http.StatusBadRequest)
+		return
+	}
+
+	decodedMetrics, err := decodeJSONMetrics(req)
+	if err != nil {
+		writeError(w, err, http.StatusBadRequest)
+		return
+	}
+
+	name, mType, err := parseValueMetrics(decodedMetrics)
+	if err != nil {
+		writeError(w, err, http.StatusBadRequest)
+		return
+	}
+
+	m, err := h.storage.GetMetrics(name, mType)
+	if err != nil {
+		writeError(w, err, http.StatusNotFound)
+		return
+	}
+
+	if mType != m.MType {
+		writeError(w, errors.New("metrics type does not match"), http.StatusBadRequest)
+		return
+	}
+
+	encodedMetrics, err := json.Marshal(m)
+	if err != nil {
+		writeError(w, err, http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set(contentType, applicationJSON)
+	w.WriteHeader(http.StatusOK)
+	if _, err = w.Write(encodedMetrics); err != nil {
+		writeError(w, err, http.StatusInternalServerError)
+	}
 }
 
 func (h *AppHandler) processMetrics(req *http.Request) error {
@@ -179,6 +220,18 @@ func parseUpdateMetrics(jsonMetrics *common.Metrics) (*models.Metrics, error) {
 		return nil, err
 	}
 	return m, nil
+}
+
+func parseValueMetrics(jsonMetrics *common.Metrics) (string, string, error) {
+	if jsonMetrics.ID == "" {
+		return "", "", errors.New("metrics id is empty")
+	}
+
+	if jsonMetrics.MType != models.Counter && jsonMetrics.MType != models.Gauge {
+		return "", "", errors.New("unknown metrics type")
+	}
+
+	return jsonMetrics.ID, jsonMetrics.MType, nil
 }
 
 func decodeJSONMetrics(req *http.Request) (*common.Metrics, error) {
