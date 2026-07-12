@@ -280,7 +280,7 @@ func TestProcessMetrics(t *testing.T) {
 				"metricsName":  "counter-name",
 				"metricsValue": "77",
 			}),
-			expectedName: "counter:counter-name",
+			expectedName: "counter-name",
 			expectedType: "counter",
 			expectErr:    false,
 			expectSaved:  true,
@@ -297,7 +297,7 @@ func TestProcessMetrics(t *testing.T) {
 				"metricsName":  "gauge-name",
 				"metricsValue": "77.76",
 			}),
-			expectedName: "gauge:gauge-name",
+			expectedName: "gauge-name",
 			expectedType: "gauge",
 			expectErr:    false,
 			expectSaved:  true,
@@ -365,7 +365,7 @@ func TestParseMetrics(t *testing.T) {
 			expectErr: false,
 			verify: func(t *testing.T, result *models.Metrics) {
 				require.NotNil(t, result)
-				assert.Equal(t, "counter:counter-name", result.ID)
+				assert.Equal(t, "counter-name", result.ID)
 				assert.Equal(t, "counter", result.MType)
 				assert.Equal(t, int64(77), *result.Delta)
 				assert.Nil(t, result.Value)
@@ -381,7 +381,7 @@ func TestParseMetrics(t *testing.T) {
 			expectErr: false,
 			verify: func(t *testing.T, result *models.Metrics) {
 				require.NotNil(t, result)
-				assert.Equal(t, "gauge:gauge-name", result.ID)
+				assert.Equal(t, "gauge-name", result.ID)
 				assert.Equal(t, "gauge", result.MType)
 				assert.Equal(t, 77.76, *result.Value)
 				assert.Nil(t, result.Delta)
