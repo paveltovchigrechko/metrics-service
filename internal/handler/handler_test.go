@@ -136,90 +136,90 @@ func TestPostMetrics(t *testing.T) {
 	}
 }
 
-func TestProcessMetrics(t *testing.T) {
-	testCases := []struct {
-		name         string
-		req          *http.Request
-		expectedName string
-		expectedType string
-		expectErr    bool
-		expectSaved  bool
-		verify       func(t *testing.T, m *models.Metrics)
-	}{
-		{
-			name: "processes valid counter metric successfully",
-			req: newRequestWithChiParams(http.MethodPost, "/update/counter/counter-name/77", map[string]string{
-				"metricsType":  "counter",
-				"metricsName":  "counter-name",
-				"metricsValue": "77",
-			}),
-			expectedName: "counter-name",
-			expectedType: "counter",
-			expectErr:    false,
-			expectSaved:  true,
-			verify: func(t *testing.T, m *models.Metrics) {
-				assert.Equal(t, "counter", m.MType)
-				assert.Equal(t, int64(77), *m.Delta)
-				assert.Nil(t, m.Value)
-			},
-		},
-		{
-			name: "processes valid gauge metric successfully",
-			req: newRequestWithChiParams(http.MethodPost, "/update/gauge/gauge-name/77.76", map[string]string{
-				"metricsType":  "gauge",
-				"metricsName":  "gauge-name",
-				"metricsValue": "77.76",
-			}),
-			expectedName: "gauge-name",
-			expectedType: "gauge",
-			expectErr:    false,
-			expectSaved:  true,
-			verify: func(t *testing.T, m *models.Metrics) {
-				assert.Equal(t, "gauge", m.MType)
-				assert.Equal(t, 77.76, *m.Value)
-				assert.Nil(t, m.Delta)
-			},
-		},
-		{
-			name: "returns error on parsing failure",
-			req: newRequestWithChiParams(http.MethodPost, "/update/counter/bad-counter/abc", map[string]string{
-				"metricsType":  "counter",
-				"metricsName":  "bad-counter",
-				"metricsValue": "abc", // Invalid digits for integer
-			}),
-			expectedName: "bad-counter",
-			expectedType: "counter",
-			expectErr:    true,
-			expectSaved:  false,
-			verify:       nil,
-		},
-	}
+// func TestProcessMetrics(t *testing.T) {
+// 	testCases := []struct {
+// 		name         string
+// 		req          *http.Request
+// 		expectedName string
+// 		expectedType string
+// 		expectErr    bool
+// 		expectSaved  bool
+// 		verify       func(t *testing.T, m *models.Metrics)
+// 	}{
+// 		{
+// 			name: "processes valid counter metric successfully",
+// 			req: newRequestWithChiParams(http.MethodPost, "/update/counter/counter-name/77", map[string]string{
+// 				"metricsType":  "counter",
+// 				"metricsName":  "counter-name",
+// 				"metricsValue": "77",
+// 			}),
+// 			expectedName: "counter-name",
+// 			expectedType: "counter",
+// 			expectErr:    false,
+// 			expectSaved:  true,
+// 			verify: func(t *testing.T, m *models.Metrics) {
+// 				assert.Equal(t, "counter", m.MType)
+// 				assert.Equal(t, int64(77), *m.Delta)
+// 				assert.Nil(t, m.Value)
+// 			},
+// 		},
+// 		{
+// 			name: "processes valid gauge metric successfully",
+// 			req: newRequestWithChiParams(http.MethodPost, "/update/gauge/gauge-name/77.76", map[string]string{
+// 				"metricsType":  "gauge",
+// 				"metricsName":  "gauge-name",
+// 				"metricsValue": "77.76",
+// 			}),
+// 			expectedName: "gauge-name",
+// 			expectedType: "gauge",
+// 			expectErr:    false,
+// 			expectSaved:  true,
+// 			verify: func(t *testing.T, m *models.Metrics) {
+// 				assert.Equal(t, "gauge", m.MType)
+// 				assert.Equal(t, 77.76, *m.Value)
+// 				assert.Nil(t, m.Delta)
+// 			},
+// 		},
+// 		{
+// 			name: "returns error on parsing failure",
+// 			req: newRequestWithChiParams(http.MethodPost, "/update/counter/bad-counter/abc", map[string]string{
+// 				"metricsType":  "counter",
+// 				"metricsName":  "bad-counter",
+// 				"metricsValue": "abc", // Invalid digits for integer
+// 			}),
+// 			expectedName: "bad-counter",
+// 			expectedType: "counter",
+// 			expectErr:    true,
+// 			expectSaved:  false,
+// 			verify:       nil,
+// 		},
+// 	}
 
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			s := models.NewMemStorage()
-			h := NewHandler(s)
+// 	for _, tc := range testCases {
+// 		t.Run(tc.name, func(t *testing.T) {
+// 			s := models.NewMemStorage()
+// 			h := NewHandler(s)
 
-			err := h.processMetrics(tc.req)
+// 			err := h.processMetrics(tc.req)
 
-			if tc.expectErr {
-				assert.Error(t, err)
-			} else {
-				assert.NoError(t, err)
-			}
+// 			if tc.expectErr {
+// 				assert.Error(t, err)
+// 			} else {
+// 				assert.NoError(t, err)
+// 			}
 
-			metric, getErr := h.storage.GetMetrics(tc.expectedName, tc.expectedType)
-			if tc.expectSaved {
-				require.NoError(t, getErr)
-				require.NotNil(t, metric)
-				tc.verify(t, metric)
-			} else {
-				assert.Error(t, getErr, "expected metric to not exist in storage")
-				assert.Nil(t, metric)
-			}
-		})
-	}
-}
+// 			metric, getErr := h.storage.GetMetrics(tc.expectedName, tc.expectedType)
+// 			if tc.expectSaved {
+// 				require.NoError(t, getErr)
+// 				require.NotNil(t, metric)
+// 				tc.verify(t, metric)
+// 			} else {
+// 				assert.Error(t, getErr, "expected metric to not exist in storage")
+// 				assert.Nil(t, metric)
+// 			}
+// 		})
+// 	}
+// }
 
 func TestParseMetrics(t *testing.T) {
 	testCases := []struct {

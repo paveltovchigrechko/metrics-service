@@ -11,6 +11,8 @@ func SetRoutes(r *chi.Mux) {
 	h := handler.NewHandler(storage)
 
 	r.Post("/update/{metricsType}/{metricsName}/{metricsValue}", h.PostMetrics)
+	r.Post("/update", h.UpdateEndpoint)
+	// r.Post("/value", h.ValueEndpoint)
 	r.Get("/", h.MainPage)
 	r.Get("/value/{metricsType}/{metricsName}", h.MetricsValue)
 }

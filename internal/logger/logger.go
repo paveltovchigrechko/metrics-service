@@ -11,6 +11,7 @@ type (
 	responseData struct {
 		status int
 		size   int
+		err    error
 	}
 
 	loggingResponseWriter struct {
@@ -18,6 +19,11 @@ type (
 		responseData        *responseData // Additional structure to save response status and size.
 	}
 )
+
+// Error interface
+type ErrorRecorder interface {
+	SetError(error)
+}
 
 func (r *loggingResponseWriter) Write(b []byte) (int, error) {
 	if r.responseData.status == 0 { // Set StatusOK if we writing something to the response.
@@ -34,6 +40,10 @@ func (r *loggingResponseWriter) WriteHeader(statusCode int) {
 	}
 	r.responseData.status = statusCode
 	r.ResponseWriter.WriteHeader(statusCode) // We use the underline original http.ResponseWriter here!
+}
+
+func (r *loggingResponseWriter) SetError(err error) {
+	r.responseData.err = err
 }
 
 func New() (*zap.SugaredLogger, error) {
@@ -72,6 +82,7 @@ func Middleware(log *zap.SugaredLogger) func(http.Handler) http.Handler {
 				"status", responseData.status,
 				"duration", duration,
 				"size", responseData.size,
+				"error", responseData.err,
 			)
 		})
 	}

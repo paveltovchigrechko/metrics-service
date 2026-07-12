@@ -11,8 +11,9 @@ import (
 )
 
 const (
-	contentType = "Content-Type"
-	textPlain   = "text/plain"
+	contentType     = "Content-Type"
+	textPlain       = "text/plain"
+	applicationJSON = "application/json"
 )
 
 var (
@@ -64,14 +65,14 @@ func validateReqPath(req *http.Request) error {
 	return nil
 }
 
-func validateReqContentType(req *http.Request) error {
+func validateReqContentType(req *http.Request, ctype string) error {
 	ct := req.Header.Get(contentType)
 
 	if ct == "" {
 		return nil
 	}
 
-	if !strings.HasPrefix(ct, textPlain) {
+	if !strings.HasPrefix(ct, ctype) {
 		return ErrUnsupportedContentType
 	}
 

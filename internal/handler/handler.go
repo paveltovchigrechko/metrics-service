@@ -1,10 +1,15 @@
 package handler
 
 import (
+	"encoding/json"
+	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/paveltovchigrechko/metrics-service/internal/common"
+	"github.com/paveltovchigrechko/metrics-service/internal/logger"
 	models "github.com/paveltovchigrechko/metrics-service/internal/model"
 )
 
@@ -26,8 +31,8 @@ func NewHandler(s models.Storage) *AppHandler {
 
 func (h *AppHandler) PostMetrics(w http.ResponseWriter, req *http.Request) {
 	// log.Printf("[DEBUG] Received request: %s", req.URL.Path) // Delete
-	if err := validateReqContentType(req); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
+	if err := validateReqContentType(req, textPlain); err != nil {
+		writeError(w, err, http.StatusBadRequest)
 		// log.Printf("[DEBUG] Header validation failed: %v", err) // Delete
 		return
 	}
@@ -35,9 +40,9 @@ func (h *AppHandler) PostMetrics(w http.ResponseWriter, req *http.Request) {
 	if err := validateReqPath(req); err != nil {
 		switch err {
 		case ErrInvalidMetricsValue, ErrInvalidMetricsType:
-			w.WriteHeader(http.StatusBadRequest)
+			writeError(w, err, http.StatusBadRequest)
 		default:
-			w.WriteHeader(http.StatusBadRequest)
+			writeError(w, err, http.StatusBadRequest)
 		}
 		// log.Printf("[DEBUG] Path validation failed: %v", err) // Delete
 		return
@@ -45,7 +50,7 @@ func (h *AppHandler) PostMetrics(w http.ResponseWriter, req *http.Request) {
 
 	err := h.processMetrics(req)
 	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
+		writeError(w, err, http.StatusBadRequest)
 		return
 	}
 	w.WriteHeader(http.StatusOK)
@@ -61,13 +66,14 @@ func (h *AppHandler) MainPage(w http.ResponseWriter, req *http.Request) {
 func (h *AppHandler) MetricsValue(w http.ResponseWriter, req *http.Request) {
 	err := validateMetricsType(req)
 	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
+		writeError(w, err, http.StatusBadRequest)
 		return
 	}
 
 	metricsName := chi.URLParam(req, "metricsName")
 	metricsType := chi.URLParam(req, "metricsType")
-	metrics, err := h.storage.GetMetrics(metricsName, metricsType)
+	metricsID := metricsType + ":" + metricsName
+	metrics, err := h.storage.GetMetrics(metricsID)
 	if err != nil {
 		w.WriteHeader(http.StatusNotFound)
 		return
@@ -82,35 +88,61 @@ func (h *AppHandler) MetricsValue(w http.ResponseWriter, req *http.Request) {
 	}
 }
 
+func (h *AppHandler) UpdateEndpoint(w http.ResponseWriter, req *http.Request) {
+	if err := validateReqContentType(req, applicationJSON); err != nil {
+		writeError(w, err, http.StatusBadRequest)
+		return
+	}
+
+	parsedMetrics, err := decodeJSONMetrics(req)
+	if err != nil {
+		writeError(w, err, http.StatusBadRequest)
+		return
+	}
+
+	metrics, err := parseUpdateMetrics(parsedMetrics)
+	if err != nil {
+		writeError(w, err, http.StatusBadRequest)
+		return
+	}
+
+	err = h.storage.SaveMetrics(metrics)
+	if err != nil {
+		writeError(w, err, http.StatusBadRequest)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+}
+
 func (h *AppHandler) processMetrics(req *http.Request) error {
-	// Parse metric and its value. We know the metric has a name, a correct type, and value.
-	metric, err := parseMetrics(req)
+	// Parse metrics and its value. We know the metrics has a name, a correct type, and value.
+	metrics, err := parseMetrics(req)
 	if err != nil {
 		return err
 	}
 
-	return h.storage.SaveMetrics(metric)
+	return h.storage.SaveMetrics(metrics)
 }
 
 // This function assumes the input url.Url passed validateReqPath().
 func parseMetrics(req *http.Request) (*models.Metrics, error) {
-	metricType, metricName, metricValue := chi.URLParam(req, "metricsType"), chi.URLParam(req, "metricsName"), chi.URLParam(req, "metricsValue")
-	metricID := metricType + ":" + metricName
+	metricsType, metricsName, metricsValue := chi.URLParam(req, "metricsType"), chi.URLParam(req, "metricsName"), chi.URLParam(req, "metricsValue")
+	metricsID := metricsType + ":" + metricsName
 	// check for empty strings?
 	m := models.Metrics{
-		ID:    metricID,
-		MType: metricType,
+		ID:    metricsID,
+		MType: metricsType,
 	}
 
 	// TODO: Remove duplicate logic with validateReqPath().
-	if metricType == models.Counter {
-		value, err := strconv.ParseInt(metricValue, 10, 64)
+	if metricsType == models.Counter {
+		value, err := strconv.ParseInt(metricsValue, 10, 64)
 		if err != nil {
 			return nil, err
 		}
 		m.Delta = &value
 	} else {
-		value, err := strconv.ParseFloat(metricValue, 64)
+		value, err := strconv.ParseFloat(metricsValue, 64)
 		if err != nil {
 			return nil, err
 		}
@@ -118,4 +150,57 @@ func parseMetrics(req *http.Request) (*models.Metrics, error) {
 	}
 
 	return &m, nil
+}
+
+func parseUpdateMetrics(jsonMetrics *common.Metrics) (*models.Metrics, error) {
+	if jsonMetrics.ID == "" {
+		return nil, errors.New("metrics id is empty")
+	}
+
+	var m *models.Metrics
+	var err error
+
+	switch jsonMetrics.MType {
+	case models.Counter:
+		if jsonMetrics.Delta == nil {
+			return nil, fmt.Errorf("missing delta for counter metric %s", jsonMetrics.ID)
+		}
+		m, err = models.CreateMetrics(jsonMetrics.ID, jsonMetrics.MType, *jsonMetrics.Delta, 0)
+	case models.Gauge:
+		if jsonMetrics.Value == nil {
+			return nil, fmt.Errorf("missing value for gauge metric %s", jsonMetrics.ID)
+		}
+		m, err = models.CreateMetrics(jsonMetrics.ID, jsonMetrics.MType, 0, *jsonMetrics.Value)
+	default:
+		return nil, fmt.Errorf("unknown metric type: %s", jsonMetrics.MType)
+	}
+
+	if err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+func decodeJSONMetrics(req *http.Request) (*common.Metrics, error) {
+	var jsonMetrics common.Metrics
+	decoder := json.NewDecoder(req.Body)
+	decoder.DisallowUnknownFields()
+
+	// Reading request body and unmarhal it
+	if err := decoder.Decode(&jsonMetrics); err != nil {
+		return nil, err
+	}
+
+	return &jsonMetrics, nil
+}
+
+func writeError(w http.ResponseWriter, err error, status int) {
+	// Check if we use wrapper for the ResponseWriter. In logger.go we have loggingResponseWriter for that.
+	// If so, use wrapper's method to catch the response error.
+	if recorder, ok := w.(logger.ErrorRecorder); ok {
+		recorder.SetError(err)
+	}
+
+	// Set response with error.
+	http.Error(w, err.Error(), status)
 }
