@@ -70,7 +70,7 @@ func NewAgent(cfg *config.AgentConfig) *Agent {
 }
 
 func (a *Agent) Run() {
-	// time.Ticker was suggested by AI``
+	// time.Ticker was suggested by AI
 	pollTicker := time.NewTicker(a.cfg.PollInterval)
 	reportTicker := time.NewTicker(a.cfg.ReportInterval)
 
@@ -91,6 +91,7 @@ func (a *Agent) Run() {
 }
 
 func (a *Agent) updateMetrics() {
+	// Use reflect to copy values?
 	a.Alloc = a.m.Alloc
 	a.BuckHashSys = a.m.BuckHashSys
 	a.Frees = a.m.Frees
@@ -356,6 +357,7 @@ func (a *Agent) sendMetrics(metrics []*models.Metrics) error {
 }
 
 func (a *Agent) sendMetricsJSON(metrics []*models.Metrics) error {
+	url := fmt.Sprintf("http://%s/update", a.cfg.ServerAddress)
 	for _, m := range metrics {
 		encodedMetrics, err := json.Marshal(m)
 		if err != nil {
@@ -364,7 +366,7 @@ func (a *Agent) sendMetricsJSON(metrics []*models.Metrics) error {
 
 		_, err = a.client.R().SetHeader("Content-Type", "application/json").
 			SetBody(encodedMetrics).
-			Post("http://" + a.cfg.ServerAddress + "/update")
+			Post(url)
 
 		if err != nil {
 			return err
