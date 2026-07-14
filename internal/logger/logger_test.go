@@ -39,7 +39,7 @@ func TestLoggerMiddleware(t *testing.T) {
 	fields := entry.ContextMap()
 	assert.Equal(t, http.MethodPost, fields["method"])
 	assert.Equal(t, "/update/gauge/test/10", fields["uri"])
-	assert.Equal(t, int64(http.StatusCreated), fields["status"])
-	assert.Equal(t, int64(len("created")), fields["size"])
+	assert.Equal(t, int64(http.StatusCreated), fields["response status"])
+	assert.Equal(t, int64(len("created")), fields["response size"])
 	assert.Contains(t, fields, "duration")
 }
