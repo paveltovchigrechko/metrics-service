@@ -96,7 +96,7 @@ func (a *Agent) Run() {
 			a.updateMetrics()
 		case <-reportTicker.C:
 			metrics := a.buildMetrics()
-			err := a.sendFunc(metrics)
+			err := a.Send(metrics)
 			if err != nil {
 				log.Print(err)
 			}
