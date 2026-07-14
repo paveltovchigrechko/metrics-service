@@ -1,6 +1,8 @@
 package agent
 
 import (
+	"bytes"
+	"compress/gzip"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -15,13 +17,18 @@ import (
 )
 
 const (
-	contentType = "text/plain"
+	textPlain       = "text/plain"
+	applicationJSON = "application/json"
+	gzipEncoding    = "gzip"
 )
 
+type SendMetricsFunc func([]*models.Metrics) error
+
 type Agent struct {
-	m      *runtime.MemStats
-	client *resty.Client
-	cfg    *config.AgentConfig
+	m        *runtime.MemStats
+	client   *resty.Client
+	cfg      *config.AgentConfig
+	sendFunc SendMetricsFunc
 
 	Alloc         uint64
 	BuckHashSys   uint64
@@ -58,7 +65,7 @@ type Agent struct {
 func NewAgent(cfg *config.AgentConfig) *Agent {
 	m := new(runtime.MemStats)
 	c := resty.New().
-		SetTimeout(cfg.PollInterval)
+		SetTimeout(cfg.PollInterval) // remove?
 
 	return &Agent{
 		m:           m,
@@ -69,7 +76,15 @@ func NewAgent(cfg *config.AgentConfig) *Agent {
 	}
 }
 
+func (a *Agent) Send(metrics []*models.Metrics) error {
+	if a.sendFunc == nil {
+		return fmt.Errorf("no metrics sender configured")
+	}
+	return a.sendFunc(metrics)
+}
+
 func (a *Agent) Run() {
+	a.sendFunc = a.sendMetricsCompressedJSON
 	// time.Ticker was suggested by AI
 	pollTicker := time.NewTicker(a.cfg.PollInterval)
 	reportTicker := time.NewTicker(a.cfg.ReportInterval)
@@ -81,8 +96,7 @@ func (a *Agent) Run() {
 			a.updateMetrics()
 		case <-reportTicker.C:
 			metrics := a.buildMetrics()
-			// err := a.sendMetrics(metrics) // Add configuration option for agent to use one of available sending methods.
-			err := a.sendMetricsJSON(metrics)
+			err := a.sendFunc(metrics)
 			if err != nil {
 				log.Print(err)
 			}
@@ -342,11 +356,12 @@ func (a *Agent) buildMetrics() []*models.Metrics {
 	return result
 }
 
-func (a *Agent) sendMetrics(metrics []*models.Metrics) error {
-	a.client.R().SetHeader("Content-Type", contentType)
+func (a *Agent) sendMetricsURL(metrics []*models.Metrics) error {
 	for _, m := range metrics {
 		url := a.createURLFromMetric(m)
-		_, err := a.client.R().Post(url)
+		_, err := a.client.R().
+			SetHeader("Content-Type", textPlain).
+			Post(url)
 		if err != nil {
 			return err
 		}
@@ -359,13 +374,50 @@ func (a *Agent) sendMetrics(metrics []*models.Metrics) error {
 func (a *Agent) sendMetricsJSON(metrics []*models.Metrics) error {
 	url := fmt.Sprintf("http://%s/update", a.cfg.ServerAddress)
 	for _, m := range metrics {
-		encodedMetrics, err := json.Marshal(m)
+		encodedMetrics, err := json.Marshal(m) // use resty https://resty.dev/docs/content-type-encoder-and-decoder/#in-memory-marshal-and-unmarshal
 		if err != nil {
 			return err
 		}
 
-		_, err = a.client.R().SetHeader("Content-Type", "application/json").
+		_, err = a.client.R().SetHeader("Content-Type", applicationJSON).
 			SetBody(encodedMetrics).
+			Post(url)
+
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (a *Agent) sendMetricsCompressedJSON(metrics []*models.Metrics) error {
+	url := fmt.Sprintf("http://%s/update", a.cfg.ServerAddress)
+	for _, m := range metrics {
+		encodedMetrics, err := json.Marshal(m) // use resty https://resty.dev/docs/content-type-encoder-and-decoder/#in-memory-marshal-and-unmarshal
+		if err != nil {
+			return err
+		}
+
+		var b bytes.Buffer
+
+		gzWriter, err := gzip.NewWriterLevel(&b, gzip.BestSpeed)
+		if err != nil {
+			return err
+		}
+
+		_, err = gzWriter.Write(encodedMetrics)
+		if err != nil {
+			gzWriter.Close()
+			return err
+		}
+
+		if err := gzWriter.Close(); err != nil {
+			return err
+		}
+		_, err = a.client.R().SetHeader("Content-Type", applicationJSON).
+			SetHeader("Content-Encoding", gzipEncoding).
+			SetBody(b.Bytes()).
 			Post(url)
 
 		if err != nil {
