@@ -1,6 +1,8 @@
 package logger
 
 import (
+	"bytes"
+	"io"
 	"net/http"
 	"time"
 
@@ -71,6 +73,18 @@ func LoggerMiddleware(log *zap.SugaredLogger) func(http.Handler) http.Handler {
 				responseData:   responseData,
 			}
 
+			var bodyBytes []byte
+			if r.Body != nil {
+				var err error
+				bodyBytes, err = io.ReadAll(r.Body)
+				if err != nil {
+					log.Errorw("Failed to read request body for logging", "error", err)
+				}
+				r.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
+			}
+
+			ct := r.Header.Get("Content-Type")
+			ce := r.Header.Get("Content-Encoding")
 			next.ServeHTTP(&lw, r) // Hand the request to the actual handler with out wrapper-writer
 
 			duration := time.Since(start)
@@ -79,10 +93,13 @@ func LoggerMiddleware(log *zap.SugaredLogger) func(http.Handler) http.Handler {
 				"request completed",
 				"uri", r.RequestURI,
 				"method", r.Method,
-				"status", responseData.status,
+				"request body", string(bodyBytes),
+				"request content type", ct,
+				"request content encoding", ce,
+				"response status", responseData.status,
 				"duration", duration,
-				"size", responseData.size,
-				"error", responseData.err,
+				"response size", responseData.size,
+				"response error", responseData.err,
 			)
 		})
 	}
