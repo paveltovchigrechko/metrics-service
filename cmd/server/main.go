@@ -8,6 +8,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/paveltovchigrechko/metrics-service/internal/config"
 	"github.com/paveltovchigrechko/metrics-service/internal/logger"
+	"github.com/paveltovchigrechko/metrics-service/internal/middleware"
 	"github.com/paveltovchigrechko/metrics-service/internal/router"
 )
 
@@ -28,8 +29,8 @@ func run() {
 	defer l.Sync() // Flush at the end
 
 	r := chi.NewRouter()
-	r.Use(logger.Middleware(l)) // Set middleware before setting handlers
-	router.SetRoutes(r)         // Set handlers
+	r.Use(logger.LoggerMiddleware(l), middleware.GZIPMiddleware) // Set middleware before setting handlers
+	router.SetRoutes(r)                                          // Set handlers
 
 	err = http.ListenAndServe(cfg.ServerAddress, r)
 	if err != nil {

@@ -57,7 +57,7 @@ func New() (*zap.SugaredLogger, error) {
 	return sugar, nil
 }
 
-func Middleware(log *zap.SugaredLogger) func(http.Handler) http.Handler {
+func LoggerMiddleware(log *zap.SugaredLogger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler { // This function is basically a cast to get the required signature for func (mx *chi.Mux) Use(middlewares ...func(http.Handler) http.Handler)
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			start := time.Now()

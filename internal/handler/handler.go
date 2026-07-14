@@ -32,7 +32,7 @@ func NewHandler(s models.Storage) *AppHandler {
 func (h *AppHandler) PostMetrics(w http.ResponseWriter, req *http.Request) {
 	// log.Printf("[DEBUG] Received request: %s", req.URL.Path) // Delete
 	if err := validateReqContentType(req, textPlain); err != nil {
-		writeError(w, err, http.StatusBadRequest)
+		WriteError(w, err, http.StatusBadRequest)
 		// log.Printf("[DEBUG] Header validation failed: %v", err) // Delete
 		return
 	}
@@ -40,9 +40,9 @@ func (h *AppHandler) PostMetrics(w http.ResponseWriter, req *http.Request) {
 	if err := validateReqPath(req); err != nil {
 		switch err {
 		case ErrInvalidMetricsValue, ErrInvalidMetricsType:
-			writeError(w, err, http.StatusBadRequest)
+			WriteError(w, err, http.StatusBadRequest)
 		default:
-			writeError(w, err, http.StatusBadRequest)
+			WriteError(w, err, http.StatusBadRequest)
 		}
 		// log.Printf("[DEBUG] Path validation failed: %v", err) // Delete
 		return
@@ -50,7 +50,7 @@ func (h *AppHandler) PostMetrics(w http.ResponseWriter, req *http.Request) {
 
 	err := h.processMetrics(req)
 	if err != nil {
-		writeError(w, err, http.StatusBadRequest)
+		WriteError(w, err, http.StatusBadRequest)
 		return
 	}
 	w.WriteHeader(http.StatusOK)
@@ -66,7 +66,7 @@ func (h *AppHandler) MainPage(w http.ResponseWriter, req *http.Request) {
 func (h *AppHandler) MetricsValue(w http.ResponseWriter, req *http.Request) {
 	err := validateMetricsType(req)
 	if err != nil {
-		writeError(w, err, http.StatusBadRequest)
+		WriteError(w, err, http.StatusBadRequest)
 		return
 	}
 
@@ -89,25 +89,25 @@ func (h *AppHandler) MetricsValue(w http.ResponseWriter, req *http.Request) {
 
 func (h *AppHandler) UpdateEndpoint(w http.ResponseWriter, req *http.Request) {
 	if err := validateReqContentType(req, applicationJSON); err != nil {
-		writeError(w, err, http.StatusBadRequest)
+		WriteError(w, err, http.StatusBadRequest)
 		return
 	}
 
 	parsedMetrics, err := decodeJSONMetrics(req)
 	if err != nil {
-		writeError(w, err, http.StatusBadRequest)
+		WriteError(w, err, http.StatusBadRequest)
 		return
 	}
 
 	metrics, err := parseUpdateMetrics(parsedMetrics)
 	if err != nil {
-		writeError(w, err, http.StatusBadRequest)
+		WriteError(w, err, http.StatusBadRequest)
 		return
 	}
 
 	err = h.storage.SaveMetrics(metrics)
 	if err != nil {
-		writeError(w, err, http.StatusBadRequest)
+		WriteError(w, err, http.StatusBadRequest)
 		return
 	}
 	w.WriteHeader(http.StatusOK)
@@ -115,43 +115,43 @@ func (h *AppHandler) UpdateEndpoint(w http.ResponseWriter, req *http.Request) {
 
 func (h *AppHandler) ValueEndpoint(w http.ResponseWriter, req *http.Request) {
 	if err := validateReqContentType(req, applicationJSON); err != nil {
-		writeError(w, err, http.StatusBadRequest)
+		WriteError(w, err, http.StatusBadRequest)
 		return
 	}
 
 	decodedMetrics, err := decodeJSONMetrics(req)
 	if err != nil {
-		writeError(w, err, http.StatusBadRequest)
+		WriteError(w, err, http.StatusBadRequest)
 		return
 	}
 
 	name, mType, err := parseValueMetrics(decodedMetrics)
 	if err != nil {
-		writeError(w, err, http.StatusBadRequest)
+		WriteError(w, err, http.StatusBadRequest)
 		return
 	}
 
 	m, err := h.storage.GetMetrics(name, mType)
 	if err != nil {
-		writeError(w, err, http.StatusNotFound)
+		WriteError(w, err, http.StatusNotFound)
 		return
 	}
 
 	if mType != m.MType {
-		writeError(w, errors.New("metrics type does not match"), http.StatusBadRequest)
+		WriteError(w, errors.New("metrics type does not match"), http.StatusBadRequest)
 		return
 	}
 
 	encodedMetrics, err := json.Marshal(m)
 	if err != nil {
-		writeError(w, err, http.StatusInternalServerError)
+		WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
 
 	w.Header().Set(contentType, applicationJSON)
 	w.WriteHeader(http.StatusOK)
 	if _, err = w.Write(encodedMetrics); err != nil {
-		writeError(w, err, http.StatusInternalServerError)
+		WriteError(w, err, http.StatusInternalServerError)
 	}
 }
 
@@ -246,7 +246,7 @@ func decodeJSONMetrics(req *http.Request) (*common.Metrics, error) {
 	return &jsonMetrics, nil
 }
 
-func writeError(w http.ResponseWriter, err error, status int) {
+func WriteError(w http.ResponseWriter, err error, status int) {
 	// Check if we use wrapper for the ResponseWriter. In logger.go we have loggingResponseWriter for that.
 	// If so, use wrapper's method to catch the response error.
 	if recorder, ok := w.(logger.ErrorRecorder); ok {

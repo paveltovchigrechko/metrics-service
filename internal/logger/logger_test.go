@@ -11,7 +11,7 @@ import (
 	"go.uber.org/zap/zaptest/observer"
 )
 
-func TestMiddleware(t *testing.T) {
+func TestLoggerMiddleware(t *testing.T) {
 	core, logs := observer.New(zap.InfoLevel)
 	log := zap.New(core).Sugar()
 
@@ -21,7 +21,7 @@ func TestMiddleware(t *testing.T) {
 		require.NoError(t, err)
 	})
 
-	handler := Middleware(log)(next)
+	handler := LoggerMiddleware(log)(next)
 
 	req := httptest.NewRequest(http.MethodPost, "/update/gauge/test/10", nil)
 	recorder := httptest.NewRecorder()
