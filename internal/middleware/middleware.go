@@ -53,7 +53,6 @@ func GZIPMiddleware(next http.Handler) http.Handler {
 		defer gzWriter.Close()
 
 		w.Header().Set("Content-Encoding", "gzip")
-		w.Header().Set("Content-Type", "text/html")
 
 		wrappedWriter := gzipWriter{
 			ResponseWriter: w,

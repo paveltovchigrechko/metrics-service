@@ -57,7 +57,7 @@ func (h *AppHandler) PostMetrics(w http.ResponseWriter, req *http.Request) {
 }
 
 func (h *AppHandler) MainPage(w http.ResponseWriter, req *http.Request) {
-	w.Header().Set(contentType, "text/plain; charset=utf-8")
+	w.Header().Set(contentType, "text/html; charset=utf-8")
 
 	w.Write([]byte(introText))
 	h.storage.ListMetrics(w)
