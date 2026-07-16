@@ -3,7 +3,7 @@ package config
 import (
 	"errors"
 	"flag"
-	"log"
+	"strings"
 	"time"
 
 	"github.com/caarlos0/env/v6"
@@ -16,9 +16,9 @@ type AgentConfig struct {
 }
 
 type envAgentConfig struct {
-	ServerAddress  string `env:"ADDRESS"`
-	ReportInterval int    `env:"REPORT_INTERVAL"`
-	PollInterval   int    `env:"POLL_INTERVAL"`
+	ServerAddress  *string `env:"ADDRESS"`
+	ReportInterval *int    `env:"REPORT_INTERVAL"`
+	PollInterval   *int    `env:"POLL_INTERVAL"`
 }
 
 const (
@@ -32,88 +32,87 @@ const (
 
 var errIncorrectInterval = errors.New("interval must be positive") // Make this error more descriptive: add flag and value that caused it.
 
-func newAgentConfig(addr string, repInt, pollInt time.Duration) *AgentConfig {
-	return &AgentConfig{
-		ServerAddress:  addr,
-		ReportInterval: repInt,
-		PollInterval:   pollInt,
-	}
-}
-
 func SetAgentConfig(args []string) (*AgentConfig, error) {
-	// To think about: the priority, currently the errors in flag values breaks the configuration biuld even if env variables set correctly.
-	flagConfig, err := createFlagConfig(args)
+	envCfg, err := createAgentEnvConfig()
 	if err != nil {
 		return nil, err
 	}
 
-	cfg, err := createConfig(flagConfig)
+	flagCfg, err := createAgentFlagConfig(args)
 	if err != nil {
 		return nil, err
 	}
 
-	log.Printf("Set server address to %s\n", cfg.ServerAddress)
-	log.Printf("Set report interval to %v\n", cfg.ReportInterval)
-	log.Printf("Set poll interval to %v\n", cfg.PollInterval)
-	return cfg, nil
-}
+	cfg := mergeAgentConfigs(envCfg, flagCfg)
 
-func createConfig(cfg *AgentConfig) (*AgentConfig, error) {
-	envConfig := envAgentConfig{}
-	err := readEnvVariables(&envConfig)
-	if err != nil {
+	if err := validateIntervals(cfg.PollInterval, cfg.ReportInterval); err != nil {
 		return nil, err
-	}
-
-	if envConfig.ServerAddress != "" {
-		cfg.ServerAddress = envConfig.ServerAddress
-	}
-	if envConfig.ReportInterval != 0 {
-		cfg.ReportInterval = time.Duration(envConfig.ReportInterval) * time.Second
-	} else if envConfig.ReportInterval < 0 {
-		return nil, errIncorrectInterval
-	}
-	if envConfig.PollInterval != 0 {
-		cfg.PollInterval = time.Duration(envConfig.PollInterval) * time.Second
-	} else if envConfig.PollInterval < 0 {
-		return nil, errIncorrectInterval
 	}
 
 	return cfg, nil
 }
 
-func createFlagConfig(args []string) (*AgentConfig, error) {
+func mergeAgentConfigs(envCfg *envAgentConfig, flagCfg *AgentConfig) *AgentConfig {
+	// Set server address
+	if envCfg.ServerAddress != nil {
+		flagCfg.ServerAddress = *envCfg.ServerAddress
+	}
+
+	// Set report interval
+	if envCfg.ReportInterval != nil {
+		reportIntervalSeconds := time.Duration(*envCfg.ReportInterval) * time.Second
+		flagCfg.ReportInterval = reportIntervalSeconds
+	}
+
+	// Set poll interval
+	if envCfg.PollInterval != nil {
+		pollIntervalSeconds := time.Duration(*envCfg.PollInterval) * time.Second
+		flagCfg.PollInterval = pollIntervalSeconds
+	}
+
+	return flagCfg
+}
+
+// createAgentFlagConfig parses the arguments and returns AgentConfig. The function doesn't validate parsed values.
+func createAgentFlagConfig(args []string) (*AgentConfig, error) {
 	fs := flag.NewFlagSet("agent", flag.ContinueOnError)
 	address := fs.String(servAddressFlag, defaultServerAddress, "Metrics server HTTP address")
 	reportSeconds := fs.Int(reportIntervalFlag, defaultReportInterval, "Metrics report frequency (seconds)")
 	pollSeconds := fs.Int(pollIntervalFlag, defaultPollInterval, "Metrics update frequency (seconds)")
 
 	err := fs.Parse(args)
-
 	if err != nil {
-		return nil, err
-	}
-
-	if err := validateIntervals(*reportSeconds, *pollSeconds); err != nil {
 		return nil, err
 	}
 
 	reportInterval := time.Duration(*reportSeconds) * time.Second
 	pollInterval := time.Duration(*pollSeconds) * time.Second
 
-	return newAgentConfig(*address, reportInterval, pollInterval), nil
+	return &AgentConfig{
+		ServerAddress:  *address,
+		ReportInterval: reportInterval,
+		PollInterval:   pollInterval,
+	}, nil
 }
 
-func readEnvVariables(cfg *envAgentConfig) error {
-	err := env.Parse(cfg)
+// createAgentEnvCongig parses the environment variables, validates string values for empty values, and returns envAgentConfig.
+func createAgentEnvConfig() (*envAgentConfig, error) {
+	envCfg := &envAgentConfig{}
+
+	err := env.Parse(envCfg)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	return nil
+	// Treat empty environment variables as error
+	if envCfg.ServerAddress != nil && strings.Trim(*envCfg.ServerAddress, " ") == "" {
+		return nil, errEmptyServerAddress
+	}
+
+	return envCfg, nil
 }
 
-func validateIntervals(rInt, pInt int) error {
+func validateIntervals(rInt, pInt time.Duration) error {
 	if rInt <= 0 || pInt <= 0 {
 		return errIncorrectInterval
 	}

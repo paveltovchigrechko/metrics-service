@@ -45,7 +45,7 @@ type envServerConfig struct {
 // SetSeverConfig returns the final ServerConfig to use.
 // The function uses environment and flag configurations to merge into the final one.
 func SetServerConfig(args []string) (*ServerConfig, error) {
-	envCfg, err := createEnvConfig()
+	envCfg, err := createServerEnvConfig()
 	if err != nil {
 		return nil, err
 	}
@@ -55,7 +55,7 @@ func SetServerConfig(args []string) (*ServerConfig, error) {
 		return nil, err
 	}
 
-	cfg := mergeConfigs(envCfg, flagCfg)
+	cfg := mergeServerConfigs(envCfg, flagCfg)
 
 	// Validate interval, 0 is valid here.
 	if cfg.StoreInterval < 0 {
@@ -65,8 +65,8 @@ func SetServerConfig(args []string) (*ServerConfig, error) {
 	return cfg, nil
 }
 
-// mergeConfigs merges envServerConfig and ServerConfig with environment configuration precedence.
-func mergeConfigs(envCfg *envServerConfig, flagCfg *ServerConfig) *ServerConfig {
+// mergeServerConfigs merges envServerConfig and ServerConfig with environment configuration precedence.
+func mergeServerConfigs(envCfg *envServerConfig, flagCfg *ServerConfig) *ServerConfig {
 	// Set server address
 	if envCfg.ServerAddress != nil {
 		flagCfg.ServerAddress = *envCfg.ServerAddress
@@ -117,8 +117,8 @@ func createServerFlagConfig(args []string) (*ServerConfig, error) {
 	return cfg, nil
 }
 
-// createEnvCongig parses the environment variables, validates string values for empty values, and returns envServerConfig.
-func createEnvConfig() (*envServerConfig, error) {
+// createServerEnvCongig parses the environment variables, validates string values for empty values, and returns envServerConfig.
+func createServerEnvConfig() (*envServerConfig, error) {
 	envCfg := &envServerConfig{}
 
 	err := env.Parse(envCfg)

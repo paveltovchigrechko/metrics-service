@@ -122,3 +122,115 @@ func TestSetServerConfig_Negative(t *testing.T) {
 		assert.Nil(t, cfg)
 	})
 }
+
+func TestCreateServerFlagConfig(t *testing.T) {
+	t.Run("should parse custom flags successfully", func(t *testing.T) {
+		args := []string{"-a", "127.0.0.1:4444", "-i", "120", "-f", "flag_test.json", "-r=false"}
+		cfg, err := createServerFlagConfig(args)
+
+		require.NoError(t, err)
+		require.NotNil(t, cfg)
+		assert.Equal(t, "127.0.0.1:4444", cfg.ServerAddress)
+		assert.Equal(t, 120*time.Second, cfg.StoreInterval)
+		assert.Equal(t, "flag_test.json", cfg.FileStoragePath)
+		assert.False(t, cfg.Restore)
+	})
+
+	t.Run("should return error on invalid flags", func(t *testing.T) {
+		args := []string{"-unsupported-flag"}
+		cfg, err := createServerFlagConfig(args)
+
+		assert.Error(t, err)
+		assert.Nil(t, cfg)
+	})
+}
+
+func TestCreateEnvConfig(t *testing.T) {
+	t.Run("should parse valid environment variables", func(t *testing.T) {
+		t.Setenv("ADDRESS", "127.0.0.1:3030")
+		t.Setenv("STORE_INTERVAL", "45")
+		t.Setenv("FILE_STORAGE_PATH", "env_test.json")
+		t.Setenv("RESTORE", "false")
+
+		envCfg, err := createServerEnvConfig()
+
+		require.NoError(t, err)
+		require.NotNil(t, envCfg)
+
+		assert.Equal(t, "127.0.0.1:3030", *envCfg.ServerAddress)
+		assert.Equal(t, 45, *envCfg.StoreInterval)
+		assert.Equal(t, "env_test.json", *envCfg.FileStoragePath)
+		assert.False(t, *envCfg.Restore)
+	})
+
+	t.Run("should succeed when no env vars are defined (pointers are nil)", func(t *testing.T) {
+		t.Setenv("ADDRESS", "")
+		t.Setenv("STORE_INTERVAL", "")
+		t.Setenv("FILE_STORAGE_PATH", "")
+		t.Setenv("RESTORE", "")
+
+		envCfg, err := createServerEnvConfig()
+
+		require.NoError(t, err)
+		require.NotNil(t, envCfg)
+		assert.Nil(t, envCfg.ServerAddress)
+		assert.Nil(t, envCfg.StoreInterval)
+		assert.Nil(t, envCfg.FileStoragePath)
+		assert.Nil(t, envCfg.Restore)
+	})
+}
+
+func TestMergeConfigs(t *testing.T) {
+	// Helper to quickly allocate string/int/bool pointers
+	strPtr := func(s string) *string { return &s }
+	intPtr := func(i int) *int { return &i }
+	boolPtr := func(b bool) *bool { return &b }
+
+	t.Run("should overwrite flag config with env values", func(t *testing.T) {
+		flagCfg := &ServerConfig{
+			ServerAddress:   "flag-address:8080",
+			StoreInterval:   10 * time.Second,
+			FileStoragePath: "flag-file.json",
+			Restore:         true,
+		}
+
+		envCfg := &envServerConfig{
+			ServerAddress:   strPtr("env-address:9090"),
+			StoreInterval:   intPtr(50),
+			FileStoragePath: strPtr("env-file.json"),
+			Restore:         boolPtr(false),
+		}
+
+		merged := mergeServerConfigs(envCfg, flagCfg)
+
+		require.NotNil(t, merged)
+		assert.Equal(t, "env-address:9090", merged.ServerAddress)
+		assert.Equal(t, 50*time.Second, merged.StoreInterval)
+		assert.Equal(t, "env-file.json", merged.FileStoragePath)
+		assert.False(t, merged.Restore)
+	})
+
+	t.Run("should retain flag config values if env pointers are nil", func(t *testing.T) {
+		flagCfg := &ServerConfig{
+			ServerAddress:   "flag-address:8080",
+			StoreInterval:   10 * time.Second,
+			FileStoragePath: "flag-file.json",
+			Restore:         true,
+		}
+
+		envCfg := &envServerConfig{
+			ServerAddress:   nil,
+			StoreInterval:   nil,
+			FileStoragePath: nil,
+			Restore:         nil,
+		}
+
+		merged := mergeServerConfigs(envCfg, flagCfg)
+
+		require.NotNil(t, merged)
+		assert.Equal(t, "flag-address:8080", merged.ServerAddress)
+		assert.Equal(t, 10*time.Second, merged.StoreInterval)
+		assert.Equal(t, "flag-file.json", merged.FileStoragePath)
+		assert.True(t, merged.Restore)
+	})
+}
