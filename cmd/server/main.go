@@ -22,6 +22,8 @@ func run() {
 		log.Fatal(err)
 	}
 
+	log.Println(cfg)
+
 	l, err := logger.New()
 	if err != nil {
 		log.Fatal(err)

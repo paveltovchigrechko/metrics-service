@@ -15,7 +15,7 @@ type AgentConfig struct {
 	PollInterval   time.Duration
 }
 
-type envConfig struct {
+type envAgentConfig struct {
 	ServerAddress  string `env:"ADDRESS"`
 	ReportInterval int    `env:"REPORT_INTERVAL"`
 	PollInterval   int    `env:"POLL_INTERVAL"`
@@ -30,7 +30,7 @@ const (
 	defaultPollInterval   = 2
 )
 
-var errIncorrectInterval = errors.New("interval must be positive")
+var errIncorrectInterval = errors.New("interval must be positive") // Make this error more descriptive: add flag and value that caused it.
 
 func newAgentConfig(addr string, repInt, pollInt time.Duration) *AgentConfig {
 	return &AgentConfig{
@@ -59,7 +59,7 @@ func SetAgentConfig(args []string) (*AgentConfig, error) {
 }
 
 func createConfig(cfg *AgentConfig) (*AgentConfig, error) {
-	envConfig := envConfig{}
+	envConfig := envAgentConfig{}
 	err := readEnvVariables(&envConfig)
 	if err != nil {
 		return nil, err
@@ -104,7 +104,7 @@ func createFlagConfig(args []string) (*AgentConfig, error) {
 	return newAgentConfig(*address, reportInterval, pollInterval), nil
 }
 
-func readEnvVariables(cfg *envConfig) error {
+func readEnvVariables(cfg *envAgentConfig) error {
 	err := env.Parse(cfg)
 	if err != nil {
 		return err
