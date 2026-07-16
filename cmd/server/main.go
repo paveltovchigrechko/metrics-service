@@ -2,14 +2,12 @@ package main
 
 import (
 	"log"
-	"net/http"
 	"os"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/paveltovchigrechko/metrics-service/internal/config"
 	"github.com/paveltovchigrechko/metrics-service/internal/logger"
 	"github.com/paveltovchigrechko/metrics-service/internal/middleware"
-	"github.com/paveltovchigrechko/metrics-service/internal/router"
+	"github.com/paveltovchigrechko/metrics-service/internal/server"
 )
 
 func main() {
@@ -22,19 +20,16 @@ func run() {
 		log.Fatal(err)
 	}
 
-	log.Println(cfg)
-
 	l, err := logger.New()
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer l.Sync() // Flush at the end
 
-	r := chi.NewRouter()
-	r.Use(logger.LoggerMiddleware(l), middleware.GZIPMiddleware) // Set middleware before setting handlers
-	router.SetRoutes(r)                                          // Set handlers
+	serv := server.NewServer(cfg)
+	serv.UseMiddlewares(logger.LoggerMiddleware(l), middleware.GZIPMiddleware) // Set middlewares before setting handlers
 
-	err = http.ListenAndServe(cfg.ServerAddress, r)
+	err = serv.Run()
 	if err != nil {
 		log.Fatal(err)
 	}

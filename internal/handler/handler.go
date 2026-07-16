@@ -30,10 +30,8 @@ func NewHandler(s models.Storage) *AppHandler {
 }
 
 func (h *AppHandler) PostMetrics(w http.ResponseWriter, req *http.Request) {
-	// log.Printf("[DEBUG] Received request: %s", req.URL.Path) // Delete
 	if err := validateReqContentType(req, textPlain); err != nil {
 		WriteError(w, err, http.StatusBadRequest)
-		// log.Printf("[DEBUG] Header validation failed: %v", err) // Delete
 		return
 	}
 
@@ -44,7 +42,6 @@ func (h *AppHandler) PostMetrics(w http.ResponseWriter, req *http.Request) {
 		default:
 			WriteError(w, err, http.StatusBadRequest)
 		}
-		// log.Printf("[DEBUG] Path validation failed: %v", err) // Delete
 		return
 	}
 

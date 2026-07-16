@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"sort"
-	"text/tabwriter"
 )
 
 type Storage interface {
@@ -85,18 +84,18 @@ func (ms *MemStorage) ListMetrics(w io.Writer) {
 
 	sort.Strings(names)
 
-	tw := tabwriter.NewWriter(w, 0, 8, 2, ' ', 0)
-	defer tw.Flush()
+	// tw := tabwriter.NewWriter(w, 0, 8, 2, ' ', 0)
+	// defer tw.Flush()
 
-	fmt.Fprintf(tw, "Name\tValue\n")
-	fmt.Fprintf(tw, "----\t-----\n")
+	// fmt.Fprintf(tw, "Name\tValue\n")
+	// fmt.Fprintf(tw, "----\t-----\n")
 
 	for _, name := range names {
 		switch ms.Metrics[name].MType {
 		case Counter:
-			fmt.Fprintf(tw, "%s\t%d\n", ms.Metrics[name].ID, *ms.Metrics[name].Delta)
+			fmt.Fprintf(w, "<p>%s\t%d</p>", ms.Metrics[name].ID, *ms.Metrics[name].Delta)
 		case Gauge:
-			fmt.Fprintf(tw, "%s\t%.2f\n", ms.Metrics[name].ID, *ms.Metrics[name].Value)
+			fmt.Fprintf(w, "<p>%s\t%.2f</p>", ms.Metrics[name].ID, *ms.Metrics[name].Value)
 		}
 	}
 }
