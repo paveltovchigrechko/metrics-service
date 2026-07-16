@@ -1,7 +1,10 @@
 package server
 
 import (
+	"encoding/json"
+	"errors"
 	"net/http"
+	"os"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/paveltovchigrechko/metrics-service/internal/config"
@@ -16,17 +19,24 @@ type Server struct {
 	s   models.Storage
 }
 
-func NewServer(c *config.ServerConfig) *Server {
+func NewServer(c *config.ServerConfig) (*Server, error) {
 	storage := models.NewMemStorage()
-	h := handler.NewHandler(storage)
+	if c.Restore {
+		err := restoreMetrics(c.FileStoragePath, storage)
+		if err != nil && !errors.Is(err, os.ErrNotExist) { // We accept non-existent file on the first start.
+			return nil, err
+		}
+	}
 
+	h := handler.NewHandler(storage)
 	r := chi.NewRouter()
+
 	return &Server{
 		cfg: c,
 		h:   h,
 		r:   r,
 		s:   storage,
-	}
+	}, nil
 }
 
 func (s *Server) Run() error {
@@ -46,4 +56,26 @@ func (s *Server) setHandlers() {
 	s.r.Post("/value/", s.h.ValueEndpoint) // Keep for autotests
 	s.r.Get("/", s.h.MainPage)
 	s.r.Get("/value/{metricsType}/{metricsName}", s.h.MetricsValue)
+}
+
+func restoreMetrics(path string, storage models.Storage) error {
+	bytes, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+
+	metrics := make([]models.Metrics, 0)
+	err = json.Unmarshal(bytes, &metrics)
+	if err != nil {
+		return err
+	}
+	// check for empty slice
+	for i := range metrics {
+		err := storage.RestoreMetrics(&metrics[i])
+		if err != nil {
+			return err // We may want to skip a malformed metrics and try to recover the next one.
+		}
+	}
+
+	return nil
 }

@@ -5,24 +5,27 @@ import (
 	"fmt"
 	"io"
 	"sort"
+	"strings"
 )
 
 type Storage interface {
 	GetMetrics(string, string) (*Metrics, error)
 	ListMetrics(io.Writer)
 	SaveMetrics(*Metrics) error
+	RestoreMetrics(m *Metrics) error
 }
 
 type MemStorage struct {
 	Metrics map[string]*Metrics
 }
 
-const noMetricsMessage = "Currently there are no metrics to display\n"
+const noMetricsMessage = "<p>Currently there are no metrics to display</p>"
 
 var (
 	errMetricsNotFound = errors.New("metrics not found")
 	errDeltaIsNil      = errors.New("counter metrics delta is nil")
 	errValueIsNil      = errors.New("gauge metrics value is nil")
+	errEmptyID         = errors.New("metrics ID is empty")
 )
 
 func NewMemStorage() *MemStorage {
@@ -83,21 +86,36 @@ func (ms *MemStorage) ListMetrics(w io.Writer) {
 	}
 
 	sort.Strings(names)
-
-	// tw := tabwriter.NewWriter(w, 0, 8, 2, ' ', 0)
-	// defer tw.Flush()
-
-	// fmt.Fprintf(tw, "Name\tValue\n")
-	// fmt.Fprintf(tw, "----\t-----\n")
-
+	fmt.Fprint(w, "<p>ID&nbsp;&nbsp;&nbsp;&nbsp;Value</p>")
 	for _, name := range names {
 		switch ms.Metrics[name].MType {
 		case Counter:
-			fmt.Fprintf(w, "<p>%s\t%d</p>", ms.Metrics[name].ID, *ms.Metrics[name].Delta)
+			fmt.Fprintf(w, "<p>%s&nbsp;&nbsp;&nbsp;&nbsp;%d</p>", ms.Metrics[name].ID, *ms.Metrics[name].Delta)
 		case Gauge:
-			fmt.Fprintf(w, "<p>%s\t%.2f</p>", ms.Metrics[name].ID, *ms.Metrics[name].Value)
+			fmt.Fprintf(w, "<p>%s&nbsp;&nbsp;&nbsp;&nbsp;%.2f</p>", ms.Metrics[name].ID, *ms.Metrics[name].Value)
 		}
 	}
+}
+
+// RestoreMetrics
+func (ms *MemStorage) RestoreMetrics(m *Metrics) error {
+	if m.MType != Counter && m.MType != Gauge {
+		return errIncorrectMetricsType
+	}
+	if m.MType == Counter && m.Delta == nil {
+		return errDeltaIsNil
+	}
+	if m.MType == Gauge && m.Value == nil {
+		return errValueIsNil
+	}
+	if strings.Trim(m.ID, " ") == "" {
+		return errEmptyID
+	}
+
+	key := metricKey(m.ID, m.MType)
+	ms.Metrics[key] = m
+
+	return nil
 }
 
 func metricKey(name, mtype string) string {

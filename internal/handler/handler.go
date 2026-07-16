@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	introText = "Welcome to the Metrics service\n"
+	introText = "<h2>Welcome to the Metrics service</h2>"
 )
 
 type AppHandler struct {
