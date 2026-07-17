@@ -1,9 +1,15 @@
 package models
 
 import (
+	"encoding/json"
+	"errors"
+	"io"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
 
@@ -104,7 +110,7 @@ func TestMemStorage_SaveAndGetMetrics(t *testing.T) {
 			},
 			searchName:    "BadMetric",
 			searchType:    Counter,
-			expectedError: errIncorrectMetricsType,
+			expectedError: ErrUnknownMetricsType,
 			verifyState: func(t *testing.T, res *Metrics, s *MemStorage) {
 				require.NotNil(t, res)
 				assert.Equal(t, Counter, res.MType)
@@ -179,4 +185,119 @@ func TestMemStorage_SaveAndGetMetrics(t *testing.T) {
 
 func ptr[T any](v T) *T {
 	return &v
+}
+
+type MockStorage struct {
+	mock.Mock
+}
+
+func (m *MockStorage) RestoreMetrics(metric *Metrics) error {
+	args := m.Called(metric)
+	return args.Error(0)
+}
+
+func (m *MockStorage) GetMetrics(name, mtype string) (*Metrics, error) {
+	return nil, nil
+}
+
+func (m *MockStorage) ListMetrics(w io.Writer) {}
+
+func (m *MockStorage) SaveMetrics(metric *Metrics) error {
+	return nil
+}
+
+func (m *MockStorage) GetAllMetrics() []Metrics {
+	args := m.Called()
+	if rf, ok := args.Get(0).([]Metrics); ok {
+		return rf
+	}
+	return nil
+}
+
+func TestRestoreMetricsMethod(t *testing.T) {
+	testCounter := Metrics{
+		ID:    "PollCount",
+		MType: Counter,
+		Delta: int64Ptr(5),
+	}
+	testGauge := Metrics{
+		ID:    "Alloc",
+		MType: Gauge,
+		Value: float64Ptr(124.50),
+	}
+
+	validMetricsList := []Metrics{testCounter, testGauge}
+	validJSON, err := json.Marshal(validMetricsList)
+	assert.NoError(t, err)
+
+	type mockExpectation struct {
+		metric      *Metrics
+		returnError error
+	}
+
+	testCases := []struct {
+		name         string
+		fileContent  []byte
+		useWrongPath bool
+		mockReturns  []mockExpectation
+		expectedErr  string
+	}{
+		{
+			name:        "Successful restore of multiple metrics",
+			fileContent: validJSON,
+			mockReturns: []mockExpectation{
+				{metric: &testCounter, returnError: nil},
+				{metric: &testGauge, returnError: nil},
+			},
+			expectedErr: "",
+		},
+		{
+			name:         "File path does not exist",
+			useWrongPath: true,
+			expectedErr:  "no such file or directory",
+		},
+		{
+			name:        "Malformed JSON payload",
+			fileContent: []byte(`[{"id": "PollCount", "type": "counter", "delta": "invalid_type"}`),
+			expectedErr: "unexpected end of JSON",
+		},
+		{
+			name:        "Storage returns an error on save",
+			fileContent: validJSON,
+			mockReturns: []mockExpectation{
+				{metric: &testCounter, returnError: errors.New("database connection lost")},
+			},
+			expectedErr: "database connection lost",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			tmpDir := t.TempDir()
+			filePath := filepath.Join(tmpDir, "metrics_backup.json")
+
+			if !tc.useWrongPath {
+				err := os.WriteFile(filePath, tc.fileContent, 0644)
+				assert.NoError(t, err)
+			} else {
+				filePath = filepath.Join(tmpDir, "non_existent_file.json")
+			}
+
+			mockStorage := new(MockStorage)
+			for _, exp := range tc.mockReturns {
+				mockStorage.On("RestoreMetrics", exp.metric).Return(exp.returnError).Once()
+			}
+
+			err := RestoreMetrics(filePath, mockStorage)
+
+			if tc.expectedErr != "" {
+				assert.Error(t, err)
+				assert.Contains(t, err.Error(), tc.expectedErr)
+			} else {
+				assert.NoError(t, err)
+			}
+
+			mockStorage.AssertExpectations(t)
+		})
+	}
 }

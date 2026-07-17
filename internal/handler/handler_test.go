@@ -3,6 +3,7 @@ package handler
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -16,15 +17,53 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-type MockStorage struct {
-	OnGetMetrics  func(string) (*models.Metrics, error)
-	OnSaveMetrics func(*models.Metrics) error
-	OnListMetrics func(io.Writer)
+// Pointer helpers for types
+func ptr[T any](v T) *T {
+	return &v
 }
 
-func (m *MockStorage) GetMetrics(name string) (*models.Metrics, error) { return m.OnGetMetrics(name) }
-func (m *MockStorage) SaveMetrics(mt *models.Metrics) error            { return m.OnSaveMetrics(mt) }
-func (m *MockStorage) ListMetrics(w io.Writer)                         { m.OnListMetrics(w) }
+// MockStorage implements models.Storage explicitly.
+type MockStorage struct {
+	OnGetMetrics     func(string, string) (*models.Metrics, error)
+	OnListMetrics    func(io.Writer)
+	OnSaveMetrics    func(*models.Metrics) error
+	OnRestoreMetrics func(*models.Metrics) error
+	OnGetAllMetrics  func() []models.Metrics
+}
+
+func (m *MockStorage) GetMetrics(name, mtype string) (*models.Metrics, error) {
+	if m.OnGetMetrics != nil {
+		return m.OnGetMetrics(name, mtype)
+	}
+	return nil, nil
+}
+
+func (m *MockStorage) ListMetrics(w io.Writer) {
+	if m.OnListMetrics != nil {
+		m.OnListMetrics(w)
+	}
+}
+
+func (m *MockStorage) SaveMetrics(mt *models.Metrics) error {
+	if m.OnSaveMetrics != nil {
+		return m.OnSaveMetrics(mt)
+	}
+	return nil
+}
+
+func (m *MockStorage) RestoreMetrics(mt *models.Metrics) error {
+	if m.OnRestoreMetrics != nil {
+		return m.OnRestoreMetrics(mt)
+	}
+	return nil
+}
+
+func (m *MockStorage) GetAllMetrics() []models.Metrics {
+	if m.OnGetAllMetrics != nil {
+		return m.OnGetAllMetrics()
+	}
+	return nil
+}
 
 func newRequestWithChiParams(method, target string, params map[string]string) *http.Request {
 	req := httptest.NewRequest(method, target, nil)
@@ -35,9 +74,13 @@ func newRequestWithChiParams(method, target string, params map[string]string) *h
 	return req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, chiCtx))
 }
 
+// ==========================================
+// CORE HANDLER UNIT TESTS
+// ==========================================
+
 func TestNewHandler(t *testing.T) {
 	s := models.NewMemStorage()
-	h := NewHandler(s)
+	h := NewHandler(s, nil)
 
 	assert.NotNil(t, h)
 	assert.NotNil(t, h.storage)
@@ -45,12 +88,13 @@ func TestNewHandler(t *testing.T) {
 
 func TestPostMetrics(t *testing.T) {
 	tests := []struct {
-		name     string
-		method   string
-		target   string
-		headers  map[string]string
-		wantCode int
-		wantType string
+		name      string
+		method    string
+		target    string
+		headers   map[string]string
+		updateErr error
+		wantCode  int
+		wantType  string
 	}{
 		{
 			name:     "positive test #1 (valid gauge)",
@@ -77,7 +121,7 @@ func TestPostMetrics(t *testing.T) {
 			wantType: "",
 		},
 		{
-			name:     "positive test - missing content type",
+			name:     "positive test - missing content type defaults to text/plain",
 			method:   http.MethodPost,
 			target:   "/update/gauge/Alloc/1024.50",
 			headers:  map[string]string{},
@@ -85,7 +129,7 @@ func TestPostMetrics(t *testing.T) {
 			wantType: "",
 		},
 		{
-			name:     "negative test - 400 no metric",
+			name:     "negative test - 400 no metric name",
 			method:   http.MethodPost,
 			target:   "/update/gauge/",
 			headers:  map[string]string{"Content-Type": "text/plain"},
@@ -93,7 +137,7 @@ func TestPostMetrics(t *testing.T) {
 			wantType: "",
 		},
 		{
-			name:     "negative test - 400 invalid metric value",
+			name:     "negative test - 400 invalid metric value formatting",
 			method:   http.MethodPost,
 			target:   "/update/gauge/Alloc/abc",
 			headers:  map[string]string{"Content-Type": "text/plain"},
@@ -101,12 +145,20 @@ func TestPostMetrics(t *testing.T) {
 			wantType: "",
 		},
 		{
-			name:     "negative test - 400 invalid metric type",
+			name:     "negative test - 400 invalid metric type value",
 			method:   http.MethodPost,
 			target:   "/update/unknown-type/Alloc/100",
 			headers:  map[string]string{"Content-Type": "text/plain"},
 			wantCode: http.StatusBadRequest,
 			wantType: "",
+		},
+		{
+			name:      "negative test - 500 when synchronous afterSuccessfulUpdate fails",
+			method:    http.MethodPost,
+			target:    "/update/gauge/Alloc/100",
+			headers:   map[string]string{"Content-Type": "text/plain"},
+			updateErr: errors.New("failed to flush data"),
+			wantCode:  http.StatusInternalServerError,
 		},
 	}
 
@@ -118,7 +170,11 @@ func TestPostMetrics(t *testing.T) {
 			}
 
 			s := models.NewMemStorage()
-			h := NewHandler(s)
+			var updateFunc func() error
+			if test.updateErr != nil {
+				updateFunc = func() error { return test.updateErr }
+			}
+			h := NewHandler(s, updateFunc)
 			r := chi.NewRouter()
 
 			r.Method(http.MethodPost, "/update/{metricsType}/{metricsName}/{metricsValue}", http.HandlerFunc(h.PostMetrics))
@@ -139,11 +195,106 @@ func TestPostMetrics(t *testing.T) {
 	}
 }
 
+func TestMainPage(t *testing.T) {
+	t.Run("successfully renders html list", func(t *testing.T) {
+		mockStorage := &MockStorage{
+			OnListMetrics: func(w io.Writer) {
+				_, _ = w.Write([]byte("<li>Alloc: 100</li>"))
+			},
+		}
+		h := NewHandler(mockStorage, nil)
+
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		w := httptest.NewRecorder()
+
+		h.MainPage(w, req)
+
+		assert.Equal(t, http.StatusOK, w.Code)
+		assert.Contains(t, w.Header().Get("Content-Type"), "text/html")
+		assert.Contains(t, w.Body.String(), "Welcome to the Metrics service")
+		assert.Contains(t, w.Body.String(), "<li>Alloc: 100</li>")
+	})
+}
+
+func TestMetricsValue(t *testing.T) {
+	tests := []struct {
+		name         string
+		params       map[string]string
+		mockStorage  func() models.Storage
+		expectedCode int
+		expectedBody string
+	}{
+		{
+			name: "successful counter extraction",
+			params: map[string]string{
+				"metricsType": "counter",
+				"metricsName": "PollCount",
+			},
+			mockStorage: func() models.Storage {
+				m := &MockStorage{}
+				m.OnGetMetrics = func(name, mtype string) (*models.Metrics, error) {
+					return &models.Metrics{ID: "PollCount", MType: "counter", Delta: ptr(int64(45))}, nil
+				}
+				return m
+			},
+			expectedCode: http.StatusOK,
+			expectedBody: "45",
+		},
+		{
+			name: "successful gauge extraction",
+			params: map[string]string{
+				"metricsType": "gauge",
+				"metricsName": "Alloc",
+			},
+			mockStorage: func() models.Storage {
+				m := &MockStorage{}
+				m.OnGetMetrics = func(name, mtype string) (*models.Metrics, error) {
+					return &models.Metrics{ID: "Alloc", MType: "gauge", Value: ptr(1234.56)}, nil
+				}
+				return m
+			},
+			expectedCode: http.StatusOK,
+			expectedBody: "1234.56",
+		},
+		{
+			name: "returns 404 when metric not found in storage",
+			params: map[string]string{
+				"metricsType": "gauge",
+				"metricsName": "NonExistent",
+			},
+			mockStorage: func() models.Storage {
+				m := &MockStorage{}
+				m.OnGetMetrics = func(name, mtype string) (*models.Metrics, error) {
+					return nil, errors.New("not found")
+				}
+				return m
+			},
+			expectedCode: http.StatusNotFound,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h := NewHandler(tt.mockStorage(), nil)
+			req := newRequestWithChiParams(http.MethodGet, "/", tt.params)
+			w := httptest.NewRecorder()
+
+			h.MetricsValue(w, req)
+
+			assert.Equal(t, tt.expectedCode, w.Code)
+			if tt.expectedCode == http.StatusOK {
+				assert.Equal(t, tt.expectedBody, w.Body.String())
+			}
+		})
+	}
+}
+
 func TestUpdateEndpoint(t *testing.T) {
 	tests := []struct {
 		name        string
 		contentType string
 		body        string
+		updateErr   error
 		wantStatus  int
 	}{
 		{
@@ -176,12 +327,23 @@ func TestUpdateEndpoint(t *testing.T) {
 			body:        `{"id": "PollCount", "type": "counter",`,
 			wantStatus:  http.StatusBadRequest,
 		},
+		{
+			name:        "failed synchronous flush",
+			contentType: "application/json",
+			body:        `{"id": "Alloc", "type": "gauge", "value": 154.32}`,
+			updateErr:   errors.New("disk full"),
+			wantStatus:  http.StatusInternalServerError,
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			s := models.NewMemStorage()
-			h := NewHandler(s)
+			var updateFunc func() error
+			if tt.updateErr != nil {
+				updateFunc = func() error { return tt.updateErr }
+			}
+			h := NewHandler(s, updateFunc)
 
 			req := httptest.NewRequest(http.MethodPost, "/update", strings.NewReader(tt.body))
 			if tt.contentType != "" {
@@ -201,7 +363,7 @@ func TestValueEndpoint(t *testing.T) {
 		name         string
 		contentType  string
 		body         string
-		setupStorage func(s models.Storage)
+		setupStorage func() models.Storage
 		wantStatus   int
 		wantInBody   string
 	}{
@@ -209,8 +371,12 @@ func TestValueEndpoint(t *testing.T) {
 			name:        "successfully get counter value",
 			contentType: "application/json",
 			body:        `{"id": "PollCount", "type": "counter"}`,
-			setupStorage: func(s models.Storage) {
-				_ = s.SaveMetrics(&models.Metrics{ID: "PollCount", MType: "counter", Delta: ptr(int64(42))})
+			setupStorage: func() models.Storage {
+				m := &MockStorage{}
+				m.OnGetMetrics = func(name, mtype string) (*models.Metrics, error) {
+					return &models.Metrics{ID: "PollCount", MType: "counter", Delta: ptr(int64(42))}, nil
+				}
+				return m
 			},
 			wantStatus: http.StatusOK,
 			wantInBody: `"delta":42`,
@@ -219,33 +385,56 @@ func TestValueEndpoint(t *testing.T) {
 			name:        "successfully get gauge value",
 			contentType: "application/json",
 			body:        `{"id": "Alloc", "type": "gauge"}`,
-			setupStorage: func(s models.Storage) {
-				_ = s.SaveMetrics(&models.Metrics{ID: "Alloc", MType: "gauge", Value: ptr(12.34)})
+			setupStorage: func() models.Storage {
+				m := &MockStorage{}
+				m.OnGetMetrics = func(name, mtype string) (*models.Metrics, error) {
+					return &models.Metrics{ID: "Alloc", MType: "gauge", Value: ptr(12.34)}, nil
+				}
+				return m
 			},
 			wantStatus: http.StatusOK,
 			wantInBody: `"value":12.34`,
 		},
 		{
-			name:         "metric not found",
-			contentType:  "application/json",
-			body:         `{"id": "Missing", "type": "gauge"}`,
-			setupStorage: func(s models.Storage) {},
-			wantStatus:   http.StatusNotFound,
+			name:        "metric not found",
+			contentType: "application/json",
+			body:        `{"id": "Missing", "type": "gauge"}`,
+			setupStorage: func() models.Storage {
+				m := &MockStorage{}
+				m.OnGetMetrics = func(name, mtype string) (*models.Metrics, error) {
+					return nil, errors.New("not found")
+				}
+				return m
+			},
+			wantStatus: http.StatusNotFound,
 		},
 		{
-			name:         "incorrect content type",
-			contentType:  "text/plain",
-			body:         `{"id": "Alloc", "type": "gauge"}`,
-			setupStorage: func(s models.Storage) {},
-			wantStatus:   http.StatusBadRequest,
+			name:        "incorrect content type",
+			contentType: "text/plain",
+			body:        `{"id": "Alloc", "type": "gauge"}`,
+			setupStorage: func() models.Storage {
+				return &MockStorage{}
+			},
+			wantStatus: http.StatusBadRequest,
+		},
+		{
+			name:        "type mismatch in found metric",
+			contentType: "application/json",
+			body:        `{"id": "Alloc", "type": "counter"}`, // requesting counter
+			setupStorage: func() models.Storage {
+				m := &MockStorage{}
+				m.OnGetMetrics = func(name, mtype string) (*models.Metrics, error) {
+					return &models.Metrics{ID: "Alloc", MType: "gauge", Value: ptr(12.34)}, nil // returns gauge
+				}
+				return m
+			},
+			wantStatus: http.StatusBadRequest,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			s := models.NewMemStorage()
-			tt.setupStorage(s)
-			h := NewHandler(s)
+			h := NewHandler(tt.setupStorage(), nil)
 
 			req := httptest.NewRequest(http.MethodPost, "/value", strings.NewReader(tt.body))
 			if tt.contentType != "" {
@@ -262,6 +451,10 @@ func TestValueEndpoint(t *testing.T) {
 		})
 	}
 }
+
+// ==========================================
+// PARSING & HELPER METHOD UNIT TESTS
+// ==========================================
 
 func TestProcessMetrics(t *testing.T) {
 	testCases := []struct {
@@ -312,7 +505,7 @@ func TestProcessMetrics(t *testing.T) {
 			req: newRequestWithChiParams(http.MethodPost, "/update/counter/bad-counter/abc", map[string]string{
 				"metricsType":  "counter",
 				"metricsName":  "bad-counter",
-				"metricsValue": "abc", // Invalid digits for integer
+				"metricsValue": "abc",
 			}),
 			expectedName: "bad-counter",
 			expectedType: "counter",
@@ -325,7 +518,7 @@ func TestProcessMetrics(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			s := models.NewMemStorage()
-			h := NewHandler(s)
+			h := NewHandler(s, nil)
 
 			err := h.processMetrics(tc.req)
 
@@ -392,7 +585,7 @@ func TestParseMetrics(t *testing.T) {
 			req: newRequestWithChiParams(http.MethodPost, "/update/counter/counter-name/12.34", map[string]string{
 				"metricsType":  "counter",
 				"metricsName":  "counter-name",
-				"metricsValue": "12.34", // Float value into counter
+				"metricsValue": "12.34",
 			}),
 			expectErr: true,
 			verify: func(t *testing.T, result *models.Metrics) {
@@ -603,8 +796,4 @@ func TestDecodeJSONMetrics(t *testing.T) {
 			}
 		})
 	}
-}
-
-func ptr[T any](v T) *T {
-	return &v
 }

@@ -19,11 +19,17 @@ const (
 
 type AppHandler struct {
 	storage models.Storage
+
+	// A callback for synchronous writing metrics to a FileStorage.
+	// Should be used by server.Server if config.ServerConfig.StoreInterval == 0.
+	// For other cases, the function value must be nil.
+	afterSuccessfulUpdate func() error
 }
 
-func NewHandler(s models.Storage) *AppHandler {
+func NewHandler(s models.Storage, updateFunc func() error) *AppHandler {
 	h := &AppHandler{
-		storage: s,
+		storage:               s,
+		afterSuccessfulUpdate: updateFunc,
 	}
 
 	return h
@@ -49,6 +55,15 @@ func (h *AppHandler) PostMetrics(w http.ResponseWriter, req *http.Request) {
 	if err != nil {
 		WriteError(w, err, http.StatusBadRequest)
 		return
+	}
+
+	if h.afterSuccessfulUpdate != nil {
+		// The think about: if we proccessed metrics earlier, but fail on writing to the file, the client receives Internal Server Error.
+		// Should we handle this case with 200 response?
+		if err := h.afterSuccessfulUpdate(); err != nil {
+			WriteError(w, err, http.StatusInternalServerError)
+			return
+		}
 	}
 	w.WriteHeader(http.StatusOK)
 }
@@ -106,6 +121,13 @@ func (h *AppHandler) UpdateEndpoint(w http.ResponseWriter, req *http.Request) {
 	if err != nil {
 		WriteError(w, err, http.StatusBadRequest)
 		return
+	}
+
+	if h.afterSuccessfulUpdate != nil {
+		if err := h.afterSuccessfulUpdate(); err != nil {
+			WriteError(w, err, http.StatusInternalServerError)
+			return
+		}
 	}
 	w.WriteHeader(http.StatusOK)
 }
@@ -191,7 +213,7 @@ func parseMetrics(req *http.Request) (*models.Metrics, error) {
 
 func parseUpdateMetrics(jsonMetrics *common.Metrics) (*models.Metrics, error) {
 	if jsonMetrics.ID == "" {
-		return nil, errors.New("metrics id is empty")
+		return nil, models.ErrEmptyMetricsID
 	}
 
 	var m *models.Metrics
@@ -209,7 +231,7 @@ func parseUpdateMetrics(jsonMetrics *common.Metrics) (*models.Metrics, error) {
 		}
 		m, err = models.CreateMetrics(jsonMetrics.ID, jsonMetrics.MType, 0, *jsonMetrics.Value)
 	default:
-		return nil, fmt.Errorf("unknown metric type: %s", jsonMetrics.MType)
+		return nil, models.ErrUnknownMetricsType
 	}
 
 	if err != nil {
@@ -220,11 +242,11 @@ func parseUpdateMetrics(jsonMetrics *common.Metrics) (*models.Metrics, error) {
 
 func parseValueMetrics(jsonMetrics *common.Metrics) (string, string, error) {
 	if jsonMetrics.ID == "" {
-		return "", "", errors.New("metrics id is empty")
+		return "", "", models.ErrEmptyMetricsID
 	}
 
 	if jsonMetrics.MType != models.Counter && jsonMetrics.MType != models.Gauge {
-		return "", "", errors.New("unknown metrics type")
+		return "", "", models.ErrUnknownMetricsType
 	}
 
 	return jsonMetrics.ID, jsonMetrics.MType, nil

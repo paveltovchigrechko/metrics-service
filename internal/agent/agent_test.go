@@ -5,7 +5,6 @@ import (
 	"net/http/httptest"
 	"runtime"
 	"strings"
-	"sync"
 	"testing"
 
 	"github.com/paveltovchigrechko/metrics-service/internal/config"
@@ -29,13 +28,10 @@ func TestNewAgent(t *testing.T) {
 
 func TestSendMetrics(t *testing.T) {
 	t.Run("successfully sends counter and gauge metrics", func(t *testing.T) {
-		var mu sync.Mutex
 		var receivedPaths []string
 
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			mu.Lock()
 			receivedPaths = append(receivedPaths, r.URL.Path)
-			mu.Unlock()
 			w.WriteHeader(http.StatusOK)
 		}))
 		defer server.Close()
@@ -57,8 +53,6 @@ func TestSendMetrics(t *testing.T) {
 		err = a.sendMetricsURL([]*models.Metrics{counterMetric, gaugeMetric})
 		require.NoError(t, err)
 
-		mu.Lock()
-		defer mu.Unlock()
 		require.Len(t, receivedPaths, 2)
 		assert.Equal(t, "/update/counter/PollCount/10", receivedPaths[0])
 		assert.Equal(t, "/update/gauge/Alloc/123.45", receivedPaths[1])

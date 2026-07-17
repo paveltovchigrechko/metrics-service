@@ -1,10 +1,11 @@
 package server
 
 import (
-	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/paveltovchigrechko/metrics-service/internal/config"
@@ -13,69 +14,75 @@ import (
 )
 
 type Server struct {
-	cfg *config.ServerConfig
-	h   *handler.AppHandler
-	r   *chi.Mux
-	s   models.Storage
+	cfg         *config.ServerConfig
+	handler     *handler.AppHandler
+	router      *chi.Mux
+	storage     models.Storage
+	fileStorage *models.FileStorage
 }
 
 func NewServer(c *config.ServerConfig) (*Server, error) {
 	storage := models.NewMemStorage()
 	if c.Restore {
-		err := restoreMetrics(c.FileStoragePath, storage)
+		err := models.RestoreMetrics(c.FileStoragePath, storage)
 		if err != nil && !errors.Is(err, os.ErrNotExist) { // We accept non-existent file on the first start.
 			return nil, err
 		}
 	}
 
-	h := handler.NewHandler(storage)
+	var h *handler.AppHandler
+	fs := &models.FileStorage{Path: c.FileStoragePath}
+	if c.StoreInterval == 0 {
+		updateFunc := func() error {
+			return fs.Save(storage)
+		}
+		h = handler.NewHandler(storage, updateFunc)
+	} else {
+		h = handler.NewHandler(storage, nil)
+	}
+
 	r := chi.NewRouter()
 
 	return &Server{
-		cfg: c,
-		h:   h,
-		r:   r,
-		s:   storage,
+		cfg:         c,
+		handler:     h,
+		router:      r,
+		storage:     storage,
+		fileStorage: fs,
 	}, nil
 }
 
 func (s *Server) Run() error {
 	s.setHandlers()
-	return http.ListenAndServe(s.cfg.ServerAddress, s.r)
+
+	if s.cfg.StoreInterval > 0 {
+		go s.runStoreLoop() // Separate thread for time ticker
+	}
+
+	return http.ListenAndServe(s.cfg.ServerAddress, s.router)
 }
 
 func (s *Server) UseMiddlewares(middlewares ...func(http.Handler) http.Handler) {
-	s.r.Use(middlewares...)
+	s.router.Use(middlewares...)
 }
 
 func (s *Server) setHandlers() {
-	s.r.Post("/update/{metricsType}/{metricsName}/{metricsValue}", s.h.PostMetrics)
-	s.r.Post("/update", s.h.UpdateEndpoint)
-	s.r.Post("/update/", s.h.UpdateEndpoint) // Keep for autotests
-	s.r.Post("/value", s.h.ValueEndpoint)
-	s.r.Post("/value/", s.h.ValueEndpoint) // Keep for autotests
-	s.r.Get("/", s.h.MainPage)
-	s.r.Get("/value/{metricsType}/{metricsName}", s.h.MetricsValue)
+	s.router.Post("/update/{metricsType}/{metricsName}/{metricsValue}", s.handler.PostMetrics)
+	s.router.Post("/update", s.handler.UpdateEndpoint)
+	s.router.Post("/update/", s.handler.UpdateEndpoint) // Keep for autotests
+	s.router.Post("/value", s.handler.ValueEndpoint)
+	s.router.Post("/value/", s.handler.ValueEndpoint) // Keep for autotests
+	s.router.Get("/", s.handler.MainPage)
+	s.router.Get("/value/{metricsType}/{metricsName}", s.handler.MetricsValue)
 }
 
-func restoreMetrics(path string, storage models.Storage) error {
-	bytes, err := os.ReadFile(path)
-	if err != nil {
-		return err
-	}
+func (s *Server) runStoreLoop() {
+	ticker := time.NewTicker(s.cfg.StoreInterval)
+	defer ticker.Stop()
 
-	metrics := make([]models.Metrics, 0)
-	err = json.Unmarshal(bytes, &metrics)
-	if err != nil {
-		return err
-	}
-	// check for empty slice
-	for i := range metrics {
-		err := storage.RestoreMetrics(&metrics[i])
-		if err != nil {
-			return err // We may want to skip a malformed metrics and try to recover the next one.
+	for range ticker.C {
+		if err := s.fileStorage.Save(s.storage); err != nil {
+			log.Printf("save metrics error: %v", err)
 		}
 	}
-
-	return nil
 }
