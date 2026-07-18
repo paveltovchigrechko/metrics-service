@@ -152,7 +152,7 @@ func TestCreateEnvConfig(t *testing.T) {
 		t.Setenv("FILE_STORAGE_PATH", "env_test.json")
 		t.Setenv("RESTORE", "false")
 
-		envCfg, err := createServerEnvConfig()
+		envCfg, err := parseEnvServerConfig()
 
 		require.NoError(t, err)
 		require.NotNil(t, envCfg)
@@ -169,7 +169,7 @@ func TestCreateEnvConfig(t *testing.T) {
 		t.Setenv("FILE_STORAGE_PATH", "")
 		t.Setenv("RESTORE", "")
 
-		envCfg, err := createServerEnvConfig()
+		envCfg, err := parseEnvServerConfig()
 
 		require.NoError(t, err)
 		require.NotNil(t, envCfg)

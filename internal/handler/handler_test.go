@@ -227,8 +227,10 @@ func TestMainPage(t *testing.T) {
 		assert.Contains(t, bodyStr, "Welcome to the Metrics service")
 		assert.Contains(t, bodyStr, "ID&nbsp;&nbsp;&nbsp;&nbsp;Value")
 
-		assert.Contains(t, bodyStr, "<p>Alloc&nbsp;&nbsp;&nbsp;&nbsp;100.00</p>")
-		assert.Contains(t, bodyStr, "<p>PollCount&nbsp;&nbsp;&nbsp;&nbsp;5</p>")
+		assert.Contains(t, bodyStr, "Alloc")
+		assert.Contains(t, bodyStr, "100.00")
+		assert.Contains(t, bodyStr, "PollCount")
+		assert.Contains(t, bodyStr, "5")
 	})
 
 	t.Run("renders empty state message when no metrics exist", func(t *testing.T) {

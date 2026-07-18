@@ -33,8 +33,8 @@ func NewMemStorage() *MemStorage {
 
 func (ms *MemStorage) GetMetrics(name, mtype string) (*Metrics, error) {
 	// Protect storage from overriding. Not necessary for current implementation.
-	// ms.mu.RLock()
-	// defer ms.mu.RUnlock()
+	ms.mu.RLock()
+	defer ms.mu.RUnlock()
 
 	key := metricKey(name, mtype)
 	metrics, ok := ms.Metrics[key]
@@ -47,8 +47,8 @@ func (ms *MemStorage) GetMetrics(name, mtype string) (*Metrics, error) {
 
 func (ms *MemStorage) SaveMetrics(m *Metrics) error {
 	// Protect storage from overriding. Not necessary for current implementation.
-	// ms.mu.Lock()
-	// defer ms.mu.Unlock()
+	ms.mu.Lock()
+	defer ms.mu.Unlock()
 
 	if m.MType != Counter && m.MType != Gauge {
 		return ErrUnknownMetricsType

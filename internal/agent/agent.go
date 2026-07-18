@@ -22,13 +22,10 @@ const (
 	gzipEncoding    = "gzip"
 )
 
-type SendMetricsFunc func([]*models.Metrics) error
-
 type Agent struct {
-	m        *runtime.MemStats
-	client   *resty.Client
-	cfg      *config.AgentConfig
-	sendFunc SendMetricsFunc
+	m      *runtime.MemStats
+	client *resty.Client
+	cfg    *config.AgentConfig
 
 	Alloc         uint64
 	BuckHashSys   uint64
@@ -76,15 +73,7 @@ func NewAgent(cfg *config.AgentConfig) *Agent {
 	}
 }
 
-func (a *Agent) Send(metrics []*models.Metrics) error {
-	if a.sendFunc == nil {
-		return fmt.Errorf("no metrics sender configured")
-	}
-	return a.sendFunc(metrics)
-}
-
 func (a *Agent) Run() {
-	a.sendFunc = a.sendMetricsCompressedJSON
 	// time.Ticker was suggested by AI
 	pollTicker := time.NewTicker(a.cfg.PollInterval)
 	reportTicker := time.NewTicker(a.cfg.ReportInterval)
@@ -96,7 +85,7 @@ func (a *Agent) Run() {
 			a.updateMetrics()
 		case <-reportTicker.C:
 			metrics := a.buildMetrics()
-			err := a.Send(metrics)
+			err := a.sendMetricsJSON(metrics, true)
 			if err != nil {
 				log.Print(err)
 			}
@@ -371,61 +360,61 @@ func (a *Agent) sendMetricsURL(metrics []*models.Metrics) error {
 	return nil
 }
 
-func (a *Agent) sendMetricsJSON(metrics []*models.Metrics) error {
+func (a *Agent) sendMetricsJSON(metrics []*models.Metrics, gzipEnabled bool) error {
 	url := fmt.Sprintf("http://%s/update", a.cfg.ServerAddress)
 	for _, m := range metrics {
-		encodedMetrics, err := json.Marshal(m) // use resty https://resty.dev/docs/content-type-encoder-and-decoder/#in-memory-marshal-and-unmarshal
+		body, err := json.Marshal(m) // use resty https://resty.dev/docs/content-type-encoder-and-decoder/#in-memory-marshal-and-unmarshal
 		if err != nil {
 			return err
 		}
 
-		_, err = a.client.R().SetHeader("Content-Type", applicationJSON).
-			SetBody(encodedMetrics).
+		req := a.client.R().
+			SetHeader("Content-Type", applicationJSON)
+
+		if gzipEnabled {
+			body, err = gzipCompressJSON(body)
+			if err != nil {
+				return err
+			}
+
+			req.SetHeader("Content-Encoding", gzipEncoding)
+		}
+
+		resp, err := req.SetHeader("Content-Type", applicationJSON).
+			SetBody(body).
 			Post(url)
 
 		if err != nil {
 			return err
+		}
+
+		if resp.IsError() {
+			return fmt.Errorf("server returned status %s", resp.Status())
 		}
 	}
 
 	return nil
 }
 
-func (a *Agent) sendMetricsCompressedJSON(metrics []*models.Metrics) error {
-	url := fmt.Sprintf("http://%s/update", a.cfg.ServerAddress)
-	for _, m := range metrics {
-		encodedMetrics, err := json.Marshal(m) // use resty https://resty.dev/docs/content-type-encoder-and-decoder/#in-memory-marshal-and-unmarshal
-		if err != nil {
-			return err
-		}
+func gzipCompressJSON(body []byte) ([]byte, error) {
+	var b bytes.Buffer
 
-		var b bytes.Buffer
-
-		gzWriter, err := gzip.NewWriterLevel(&b, gzip.BestSpeed)
-		if err != nil {
-			return err
-		}
-
-		_, err = gzWriter.Write(encodedMetrics)
-		if err != nil {
-			gzWriter.Close()
-			return err
-		}
-
-		if err := gzWriter.Close(); err != nil {
-			return err
-		}
-		_, err = a.client.R().SetHeader("Content-Type", applicationJSON).
-			SetHeader("Content-Encoding", gzipEncoding).
-			SetBody(b.Bytes()).
-			Post(url)
-
-		if err != nil {
-			return err
-		}
+	gzWriter, err := gzip.NewWriterLevel(&b, gzip.BestSpeed)
+	if err != nil {
+		return nil, err
 	}
 
-	return nil
+	_, err = gzWriter.Write(body)
+	if err != nil {
+		gzWriter.Close()
+		return nil, err
+	}
+
+	if err := gzWriter.Close(); err != nil {
+		return nil, err
+	}
+
+	return b.Bytes(), nil
 }
 
 func (a *Agent) createURLFromMetric(m *models.Metrics) string {

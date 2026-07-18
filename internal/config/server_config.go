@@ -45,7 +45,7 @@ type envServerConfig struct {
 // SetSeverConfig returns the final ServerConfig to use.
 // The function uses environment and flag configurations to merge into the final one.
 func SetServerConfig(args []string) (*ServerConfig, error) {
-	envCfg, err := createServerEnvConfig()
+	envCfg, err := parseEnvServerConfig()
 	if err != nil {
 		return nil, err
 	}
@@ -117,8 +117,8 @@ func createServerFlagConfig(args []string) (*ServerConfig, error) {
 	return cfg, nil
 }
 
-// createServerEnvCongig parses the environment variables, validates string values for empty values, and returns envServerConfig.
-func createServerEnvConfig() (*envServerConfig, error) {
+// parseEnvServerConfig parses the environment variables, validates string values for empty values, and returns envServerConfig.
+func parseEnvServerConfig() (*envServerConfig, error) {
 	envCfg := &envServerConfig{}
 
 	err := env.Parse(envCfg)

@@ -3,9 +3,9 @@ package handler
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net/http"
 	"strconv"
+	"text/template"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/paveltovchigrechko/metrics-service/internal/common"
@@ -15,7 +15,7 @@ import (
 
 const (
 	introText        = "<h2>Welcome to the Metrics service</h2>"
-	noMetricsMessage = "<p>Currently there are no metrics to display</p>"
+	noMetricsMessage = "<p>Currently, there are no metrics to display</p>"
 )
 
 type AppHandler struct {
@@ -72,27 +72,15 @@ func (h *AppHandler) PostMetrics(w http.ResponseWriter, req *http.Request) {
 func (h *AppHandler) MainPage(w http.ResponseWriter, req *http.Request) {
 	w.Header().Set(contentType, "text/html; charset=utf-8")
 
-	w.Write([]byte(introText))
-	fmt.Fprint(w, "<p>ID&nbsp;&nbsp;&nbsp;&nbsp;Value</p>")
+	t, err := template.New("mainpage").Funcs(templateFuncs).Parse(mainPageTpl)
+	if err != nil {
+		WriteError(w, err, http.StatusInternalServerError)
+	}
 
 	metrics := h.storage.GetAllMetrics()
 
-	if len(metrics) == 0 {
-		w.Write([]byte(noMetricsMessage))
-		return
-	}
-
-	var err error
-	for _, m := range metrics {
-		switch m.MType {
-		case models.Counter:
-			_, err = fmt.Fprintf(w, "<p>%s&nbsp;&nbsp;&nbsp;&nbsp;%d</p>", m.ID, *m.Delta)
-		case models.Gauge:
-			_, err = fmt.Fprintf(w, "<p>%s&nbsp;&nbsp;&nbsp;&nbsp;%.2f</p>", m.ID, *m.Value)
-		}
-		if err != nil {
-			WriteError(w, err, http.StatusInternalServerError)
-		}
+	if err := t.Execute(w, metrics); err != nil {
+		WriteError(w, err, http.StatusInternalServerError)
 	}
 }
 
