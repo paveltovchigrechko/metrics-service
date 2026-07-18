@@ -198,8 +198,19 @@ func TestPostMetrics(t *testing.T) {
 func TestMainPage(t *testing.T) {
 	t.Run("successfully renders html list", func(t *testing.T) {
 		mockStorage := &MockStorage{
-			OnListMetrics: func(w io.Writer) {
-				_, _ = w.Write([]byte("<li>Alloc: 100</li>"))
+			OnGetAllMetrics: func() []models.Metrics {
+				return []models.Metrics{
+					{
+						ID:    "Alloc",
+						MType: models.Gauge,
+						Value: ptr(100.00),
+					},
+					{
+						ID:    "PollCount",
+						MType: models.Counter,
+						Delta: ptr(int64(5)),
+					},
+				}
 			},
 		}
 		h := NewHandler(mockStorage, nil)
@@ -211,8 +222,30 @@ func TestMainPage(t *testing.T) {
 
 		assert.Equal(t, http.StatusOK, w.Code)
 		assert.Contains(t, w.Header().Get("Content-Type"), "text/html")
-		assert.Contains(t, w.Body.String(), "Welcome to the Metrics service")
-		assert.Contains(t, w.Body.String(), "<li>Alloc: 100</li>")
+
+		bodyStr := w.Body.String()
+		assert.Contains(t, bodyStr, "Welcome to the Metrics service")
+		assert.Contains(t, bodyStr, "ID&nbsp;&nbsp;&nbsp;&nbsp;Value")
+
+		assert.Contains(t, bodyStr, "<p>Alloc&nbsp;&nbsp;&nbsp;&nbsp;100.00</p>")
+		assert.Contains(t, bodyStr, "<p>PollCount&nbsp;&nbsp;&nbsp;&nbsp;5</p>")
+	})
+
+	t.Run("renders empty state message when no metrics exist", func(t *testing.T) {
+		mockStorage := &MockStorage{
+			OnGetAllMetrics: func() []models.Metrics {
+				return []models.Metrics{}
+			},
+		}
+		h := NewHandler(mockStorage, nil)
+
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		w := httptest.NewRecorder()
+
+		h.MainPage(w, req)
+
+		assert.Equal(t, http.StatusOK, w.Code)
+		assert.Contains(t, w.Body.String(), "Currently there are no metrics to display")
 	})
 }
 
@@ -451,10 +484,6 @@ func TestValueEndpoint(t *testing.T) {
 		})
 	}
 }
-
-// ==========================================
-// PARSING & HELPER METHOD UNIT TESTS
-// ==========================================
 
 func TestProcessMetrics(t *testing.T) {
 	testCases := []struct {

@@ -39,7 +39,6 @@ func TestNewServer(t *testing.T) {
 		tmpDir := t.TempDir()
 		backupFile := filepath.Join(tmpDir, "metrics.json")
 
-		// Pre-populate some historical metrics into the backup file
 		historicalMetrics := []models.Metrics{
 			{
 				ID:    "ExistingCounter",
@@ -63,7 +62,6 @@ func TestNewServer(t *testing.T) {
 		require.NoError(t, err)
 		assert.NotNil(t, srv)
 
-		// Assert values are correctly restored into the internal memory state
 		restoredMetric, getErr := srv.storage.GetMetrics("ExistingCounter", models.Counter)
 		require.NoError(t, getErr)
 		require.NotNil(t, restoredMetric)
@@ -113,9 +111,6 @@ func TestNewServer(t *testing.T) {
 		require.NoError(t, err)
 		assert.NotNil(t, srv)
 
-		// Save a metric, then update through handlers and verify it writes directly to disk
-		srv.setHandlers()
-
 		req := httptest.NewRequest(http.MethodPost, "/update/counter/Hits/5", nil)
 		w := httptest.NewRecorder()
 		srv.router.ServeHTTP(w, req)
@@ -134,16 +129,13 @@ func TestNewServer(t *testing.T) {
 	})
 }
 
-func TestServer_UseMiddlewares(t *testing.T) {
+func TestServer_useMiddlewares(t *testing.T) {
 	cfg := &config.ServerConfig{
 		ServerAddress:   "localhost:8080",
 		StoreInterval:   time.Second * 5,
 		FileStoragePath: filepath.Join(t.TempDir(), "metrics.json"),
 		Restore:         false,
 	}
-
-	srv, err := NewServer(cfg)
-	require.NoError(t, err)
 
 	middlewareTriggered := false
 	dummyMiddleware := func(next http.Handler) http.Handler {
@@ -153,8 +145,8 @@ func TestServer_UseMiddlewares(t *testing.T) {
 		})
 	}
 
-	srv.UseMiddlewares(dummyMiddleware)
-	srv.setHandlers()
+	srv, err := NewServer(cfg, dummyMiddleware)
+	require.NoError(t, err)
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	w := httptest.NewRecorder()
@@ -173,7 +165,6 @@ func TestServer_setHandlers(t *testing.T) {
 
 	srv, err := NewServer(cfg)
 	require.NoError(t, err)
-	srv.setHandlers()
 
 	routes := []struct {
 		method string

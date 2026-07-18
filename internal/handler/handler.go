@@ -14,7 +14,8 @@ import (
 )
 
 const (
-	introText = "<h2>Welcome to the Metrics service</h2>"
+	introText        = "<h2>Welcome to the Metrics service</h2>"
+	noMetricsMessage = "<p>Currently there are no metrics to display</p>"
 )
 
 type AppHandler struct {
@@ -43,7 +44,7 @@ func (h *AppHandler) PostMetrics(w http.ResponseWriter, req *http.Request) {
 
 	if err := validateReqPath(req); err != nil {
 		switch err {
-		case ErrInvalidMetricsValue, ErrInvalidMetricsType:
+		case ErrInvalidMetricsValue, models.ErrUnknownMetricsType:
 			WriteError(w, err, http.StatusBadRequest)
 		default:
 			WriteError(w, err, http.StatusBadRequest)
@@ -72,7 +73,27 @@ func (h *AppHandler) MainPage(w http.ResponseWriter, req *http.Request) {
 	w.Header().Set(contentType, "text/html; charset=utf-8")
 
 	w.Write([]byte(introText))
-	h.storage.ListMetrics(w)
+	fmt.Fprint(w, "<p>ID&nbsp;&nbsp;&nbsp;&nbsp;Value</p>")
+
+	metrics := h.storage.GetAllMetrics()
+
+	if len(metrics) == 0 {
+		w.Write([]byte(noMetricsMessage))
+		return
+	}
+
+	var err error
+	for _, m := range metrics {
+		switch m.MType {
+		case models.Counter:
+			_, err = fmt.Fprintf(w, "<p>%s&nbsp;&nbsp;&nbsp;&nbsp;%d</p>", m.ID, *m.Delta)
+		case models.Gauge:
+			_, err = fmt.Fprintf(w, "<p>%s&nbsp;&nbsp;&nbsp;&nbsp;%.2f</p>", m.ID, *m.Value)
+		}
+		if err != nil {
+			WriteError(w, err, http.StatusInternalServerError)
+		}
+	}
 }
 
 func (h *AppHandler) MetricsValue(w http.ResponseWriter, req *http.Request) {
@@ -222,12 +243,12 @@ func parseUpdateMetrics(jsonMetrics *common.Metrics) (*models.Metrics, error) {
 	switch jsonMetrics.MType {
 	case models.Counter:
 		if jsonMetrics.Delta == nil {
-			return nil, fmt.Errorf("missing delta for counter metric %s", jsonMetrics.ID)
+			return nil, models.ErrDeltaIsNil
 		}
 		m, err = models.CreateMetrics(jsonMetrics.ID, jsonMetrics.MType, *jsonMetrics.Delta, 0)
 	case models.Gauge:
 		if jsonMetrics.Value == nil {
-			return nil, fmt.Errorf("missing value for gauge metric %s", jsonMetrics.ID)
+			return nil, models.ErrValueIsNil
 		}
 		m, err = models.CreateMetrics(jsonMetrics.ID, jsonMetrics.MType, 0, *jsonMetrics.Value)
 	default:

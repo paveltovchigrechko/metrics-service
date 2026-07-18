@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/go-chi/chi/v5"
+	models "github.com/paveltovchigrechko/metrics-service/internal/model"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -42,7 +43,7 @@ func TestValidateReqPath(t *testing.T) {
 				"metricsType":  "histogram",
 				"metricsValue": "100",
 			},
-			expectedErr: ErrInvalidMetricsType,
+			expectedErr: models.ErrUnknownMetricsType,
 		},
 		{
 			name: "negative test: invalid gauge float",
@@ -78,66 +79,59 @@ func TestValidateReqPath(t *testing.T) {
 	}
 }
 
-// func TestValidateReqContentType(t *testing.T) {
-// 	testCases := []struct {
-// 		name        string
-// 		method      string
-// 		contentType string
-// 		hasHeader   bool
-// 		expectedErr error
-// 	}{
-// 		{
-// 			name:        "positive test: POST method with text/plain content type",
-// 			method:      http.MethodPost,
-// 			contentType: "text/plain",
-// 			hasHeader:   true,
-// 			expectedErr: nil,
-// 		},
-// 		{
-// 			name:        "positive test: GET method with text/plain content type",
-// 			method:      http.MethodGet,
-// 			contentType: "text/plain",
-// 			hasHeader:   true,
-// 			expectedErr: nil,
-// 		},
-// 		{
-// 			name:        "positive test: missing content type header is allowed",
-// 			method:      http.MethodPost,
-// 			contentType: "",
-// 			hasHeader:   false,
-// 			expectedErr: nil,
-// 		},
-// 		{
-// 			name:        "positive test: extended text/plain content type is now valid via prefix match",
-// 			method:      http.MethodPost,
-// 			contentType: "text/plain; charset=utf-8",
-// 			hasHeader:   true,
-// 			expectedErr: nil,
-// 		},
-// 		{
-// 			name:        "negative test: POST method with application/json content type",
-// 			method:      http.MethodPost,
-// 			contentType: "application/json",
-// 			hasHeader:   true,
-// 			expectedErr: ErrUnsupportedContentType,
-// 		},
-// 	}
+func TestValidateReqContentType(t *testing.T) {
+	testCases := []struct {
+		name        string
+		method      string
+		contentType string
+		hasHeader   bool
+		expectedErr error
+	}{
+		{
+			name:        "positive test: POST method with text/plain content type",
+			method:      http.MethodPost,
+			contentType: "text/plain",
+			hasHeader:   true,
+			expectedErr: nil,
+		},
+		{
+			name:        "positive test: GET method with text/plain content type",
+			method:      http.MethodGet,
+			contentType: "text/plain",
+			hasHeader:   true,
+			expectedErr: nil,
+		},
+		{
+			name:        "positive test: missing content type header is allowed",
+			method:      http.MethodPost,
+			contentType: "",
+			hasHeader:   false,
+			expectedErr: nil,
+		},
+		{
+			name:        "positive test: extended text/plain content type is now valid via prefix match",
+			method:      http.MethodPost,
+			contentType: "text/plain; charset=utf-8",
+			hasHeader:   true,
+			expectedErr: nil,
+		},
+	}
 
-// 	for _, test := range testCases {
-// 		t.Run(test.name, func(t *testing.T) {
-// 			req := httptest.NewRequest(test.method, "/", nil)
+	for _, test := range testCases {
+		t.Run(test.name, func(t *testing.T) {
+			req := httptest.NewRequest(test.method, "/", nil)
 
-// 			if test.hasHeader {
-// 				req.Header.Set("Content-Type", test.contentType)
-// 			}
+			if test.hasHeader {
+				req.Header.Set("Content-Type", test.contentType)
+			}
 
-// 			err := validateReqContentType(req)
+			err := validateReqContentType(req, test.contentType)
 
-// 			if test.expectedErr == nil {
-// 				assert.NoError(t, err)
-// 			} else {
-// 				assert.ErrorIs(t, err, test.expectedErr)
-// 			}
-// 		})
-// 	}
-// }
+			if test.expectedErr == nil {
+				assert.NoError(t, err)
+			} else {
+				assert.ErrorIs(t, err, test.expectedErr)
+			}
+		})
+	}
+}

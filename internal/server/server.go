@@ -21,7 +21,7 @@ type Server struct {
 	fileStorage *models.FileStorage
 }
 
-func NewServer(c *config.ServerConfig) (*Server, error) {
+func NewServer(c *config.ServerConfig, middlewares ...func(http.Handler) http.Handler) (*Server, error) {
 	storage := models.NewMemStorage()
 	if c.Restore {
 		err := models.RestoreMetrics(c.FileStoragePath, storage)
@@ -30,31 +30,38 @@ func NewServer(c *config.ServerConfig) (*Server, error) {
 		}
 	}
 
+	fs, err := models.NewFileStorage(c.FileStoragePath)
+	if err != nil {
+		return nil, err
+	}
+
 	var h *handler.AppHandler
-	fs := &models.FileStorage{Path: c.FileStoragePath}
 	if c.StoreInterval == 0 {
 		updateFunc := func() error {
 			return fs.Save(storage)
 		}
 		h = handler.NewHandler(storage, updateFunc)
 	} else {
-		h = handler.NewHandler(storage, nil)
+		h = handler.NewHandler(storage, nil) // We don't need the callback for synchronous writing to file.
 	}
 
 	r := chi.NewRouter()
 
-	return &Server{
+	s := &Server{
 		cfg:         c,
 		handler:     h,
 		router:      r,
 		storage:     storage,
 		fileStorage: fs,
-	}, nil
+	}
+
+	s.useMiddlewares(middlewares...) // Set middlewares before setting handlers
+	s.setHandlers()                  // Set handlers
+
+	return s, nil
 }
 
 func (s *Server) Run() error {
-	s.setHandlers()
-
 	if s.cfg.StoreInterval > 0 {
 		go s.runStoreLoop() // Separate thread for time ticker
 	}
@@ -62,7 +69,7 @@ func (s *Server) Run() error {
 	return http.ListenAndServe(s.cfg.ServerAddress, s.router)
 }
 
-func (s *Server) UseMiddlewares(middlewares ...func(http.Handler) http.Handler) {
+func (s *Server) useMiddlewares(middlewares ...func(http.Handler) http.Handler) {
 	s.router.Use(middlewares...)
 }
 

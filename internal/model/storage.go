@@ -1,17 +1,13 @@
-package models
+package model
 
 import (
 	"errors"
-	"fmt"
-	"io"
-	"sort"
 	"strings"
 	"sync"
 )
 
 type Storage interface {
 	GetMetrics(string, string) (*Metrics, error)
-	ListMetrics(io.Writer)
 	SaveMetrics(*Metrics) error
 	RestoreMetrics(m *Metrics) error
 	GetAllMetrics() []Metrics
@@ -23,12 +19,10 @@ type MemStorage struct {
 	Metrics map[string]*Metrics
 }
 
-const noMetricsMessage = "<p>Currently there are no metrics to display</p>"
-
 var (
 	errMetricsNotFound = errors.New("metrics not found")
-	errDeltaIsNil      = errors.New("counter metrics delta is nil")
-	errValueIsNil      = errors.New("gauge metrics value is nil")
+	ErrDeltaIsNil      = errors.New("counter metrics delta is nil")
+	ErrValueIsNil      = errors.New("gauge metrics value is nil")
 )
 
 func NewMemStorage() *MemStorage {
@@ -70,13 +64,13 @@ func (ms *MemStorage) SaveMetrics(m *Metrics) error {
 	switch m.MType {
 	case Counter:
 		if m.Delta == nil {
-			return errDeltaIsNil
+			return ErrDeltaIsNil
 		}
 		newValue := *current.Delta + *m.Delta
 		current.Delta = &newValue
 	case Gauge:
 		if m.Value == nil {
-			return errValueIsNil
+			return ErrValueIsNil
 		}
 		current.Value = m.Value
 	default:
@@ -85,39 +79,16 @@ func (ms *MemStorage) SaveMetrics(m *Metrics) error {
 	return nil
 }
 
-func (ms *MemStorage) ListMetrics(w io.Writer) {
-	if len(ms.Metrics) == 0 {
-		w.Write([]byte(noMetricsMessage))
-		return
-	}
-
-	names := make([]string, 0, len(ms.Metrics))
-	for name := range ms.Metrics {
-		names = append(names, name)
-	}
-
-	sort.Strings(names)
-	fmt.Fprint(w, "<p>ID&nbsp;&nbsp;&nbsp;&nbsp;Value</p>")
-	for _, name := range names {
-		switch ms.Metrics[name].MType {
-		case Counter:
-			fmt.Fprintf(w, "<p>%s&nbsp;&nbsp;&nbsp;&nbsp;%d</p>", ms.Metrics[name].ID, *ms.Metrics[name].Delta)
-		case Gauge:
-			fmt.Fprintf(w, "<p>%s&nbsp;&nbsp;&nbsp;&nbsp;%.2f</p>", ms.Metrics[name].ID, *ms.Metrics[name].Value)
-		}
-	}
-}
-
 // RestoreMetrics
 func (ms *MemStorage) RestoreMetrics(m *Metrics) error {
 	if m.MType != Counter && m.MType != Gauge {
 		return ErrUnknownMetricsType
 	}
 	if m.MType == Counter && m.Delta == nil {
-		return errDeltaIsNil
+		return ErrDeltaIsNil
 	}
 	if m.MType == Gauge && m.Value == nil {
-		return errValueIsNil
+		return ErrValueIsNil
 	}
 	if strings.Trim(m.ID, " ") == "" {
 		return ErrEmptyMetricsID
@@ -130,7 +101,7 @@ func (ms *MemStorage) RestoreMetrics(m *Metrics) error {
 }
 
 func (ms *MemStorage) GetAllMetrics() []Metrics {
-	// This method is called by server, so we must protect the storage for reading, because a handler might update it.
+	// This method is called by server, so we must protect the storage for reading, because a handler might update the storage when server reads it.
 	ms.mu.RLock()
 	defer ms.mu.RUnlock()
 

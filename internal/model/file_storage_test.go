@@ -1,4 +1,4 @@
-package models
+package model
 
 import (
 	"encoding/json"
@@ -8,6 +8,40 @@ import (
 
 	"github.com/stretchr/testify/assert"
 )
+
+func TestNewFileStarage(t *testing.T) {
+	testCases := []struct {
+		name string
+		path string
+		fs   *FileStorage
+		err  error
+	}{
+		{
+			name: "non-empty path is valid",
+			path: "filename",
+			fs:   &FileStorage{path: "filename"},
+			err:  nil,
+		},
+		{
+			name: "empty path is not valid",
+			path: "",
+			fs:   nil,
+			err:  errEmptyFileStoragePath,
+		},
+		{
+			name: "whitespace path is not valid",
+			path: " ",
+			fs:   nil,
+			err:  errEmptyFileStoragePath,
+		},
+	}
+
+	for _, tc := range testCases {
+		fs, err := NewFileStorage(tc.path)
+		assert.Equal(t, fs, tc.fs)
+		assert.Equal(t, err, tc.err)
+	}
+}
 
 func TestFileStorage_Load(t *testing.T) {
 	testCounter := Metrics{
@@ -30,7 +64,9 @@ func TestFileStorage_Load(t *testing.T) {
 		// RestoreMetrics is called inside Load
 		mockStorage.On("RestoreMetrics", &testCounter).Return(nil).Once()
 
-		fs := &FileStorage{Path: filePath}
+		fs, err := NewFileStorage(filePath)
+		assert.Nil(t, err)
+
 		err = fs.Load(mockStorage)
 
 		assert.NoError(t, err)
@@ -43,8 +79,10 @@ func TestFileStorage_Load(t *testing.T) {
 
 		mockStorage := new(MockStorage)
 
-		fs := &FileStorage{Path: filePath}
-		err := fs.Load(mockStorage)
+		fs, err := NewFileStorage(filePath)
+		assert.Nil(t, err)
+
+		err = fs.Load(mockStorage)
 
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "no such file or directory")
@@ -74,8 +112,10 @@ func TestFileStorage_Save(t *testing.T) {
 		// Save calls GetAllMetrics to fetch the values
 		mockStorage.On("GetAllMetrics").Return(testMetrics).Once()
 
-		fs := &FileStorage{Path: filePath}
-		err := fs.Save(mockStorage)
+		fs, err := NewFileStorage(filePath)
+		assert.Nil(t, err)
+
+		err = fs.Save(mockStorage)
 		assert.NoError(t, err)
 
 		// Read back the file to verify its structure and content match
@@ -102,8 +142,10 @@ func TestFileStorage_Save(t *testing.T) {
 		mockStorage := new(MockStorage)
 		mockStorage.On("GetAllMetrics").Return(testMetrics).Once()
 
-		fs := &FileStorage{Path: invalidPath}
-		err := fs.Save(mockStorage)
+		fs, err := NewFileStorage(invalidPath)
+		assert.Nil(t, err)
+
+		err = fs.Save(mockStorage)
 
 		assert.Error(t, err)
 		mockStorage.AssertExpectations(t)

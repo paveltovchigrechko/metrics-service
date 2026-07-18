@@ -17,7 +17,6 @@ const (
 )
 
 var (
-	ErrInvalidMetricsType     = errors.New("Invalid metrics type")
 	ErrInvalidMetricsValue    = errors.New("Invalid metric value")
 	ErrInvalidRequestMethod   = errors.New("Invalid request method")
 	ErrUnsupportedContentType = errors.New("Unsupported content type")
@@ -26,7 +25,7 @@ var (
 func validateMetricsType(req *http.Request) error {
 	metricsType := chi.URLParam(req, "metricsType")
 	if metricsType != models.Counter && metricsType != models.Gauge {
-		return ErrInvalidMetricsType
+		return models.ErrUnknownMetricsType
 	}
 
 	return nil

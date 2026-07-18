@@ -26,11 +26,10 @@ func run() {
 	}
 	defer l.Sync() // Flush at the end
 
-	serv, err := server.NewServer(cfg)
+	serv, err := server.NewServer(cfg, logger.LoggerMiddleware(l), middleware.GZIPMiddleware)
 	if err != nil {
 		log.Fatal(err)
 	}
-	serv.UseMiddlewares(logger.LoggerMiddleware(l), middleware.GZIPMiddleware) // Set middlewares before setting handlers
 
 	err = serv.Run()
 	if err != nil {
