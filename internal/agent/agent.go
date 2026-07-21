@@ -1,6 +1,9 @@
 package agent
 
 import (
+	"bytes"
+	"compress/gzip"
+	"encoding/json"
 	"fmt"
 	"log"
 	"math"
@@ -14,7 +17,9 @@ import (
 )
 
 const (
-	contentType = "text/plain"
+	textPlain       = "text/plain"
+	applicationJSON = "application/json"
+	gzipEncoding    = "gzip"
 )
 
 type Agent struct {
@@ -57,8 +62,7 @@ type Agent struct {
 func NewAgent(cfg *config.AgentConfig) *Agent {
 	m := new(runtime.MemStats)
 	c := resty.New().
-		SetTimeout(cfg.PollInterval).
-		SetHeader("Content-Type", contentType)
+		SetTimeout(cfg.PollInterval) // remove?
 
 	return &Agent{
 		m:           m,
@@ -81,7 +85,7 @@ func (a *Agent) Run() {
 			a.updateMetrics()
 		case <-reportTicker.C:
 			metrics := a.buildMetrics()
-			err := a.sendMetrics(metrics)
+			err := a.sendMetricsJSON(metrics, true)
 			if err != nil {
 				log.Print(err)
 			}
@@ -90,6 +94,7 @@ func (a *Agent) Run() {
 }
 
 func (a *Agent) updateMetrics() {
+	// Use reflect to copy values?
 	a.Alloc = a.m.Alloc
 	a.BuckHashSys = a.m.BuckHashSys
 	a.Frees = a.m.Frees
@@ -340,10 +345,12 @@ func (a *Agent) buildMetrics() []*models.Metrics {
 	return result
 }
 
-func (a *Agent) sendMetrics(metrics []*models.Metrics) error {
+func (a *Agent) sendMetricsURL(metrics []*models.Metrics) error {
 	for _, m := range metrics {
 		url := a.createURLFromMetric(m)
-		_, err := a.client.R().Post(url)
+		_, err := a.client.R().
+			SetHeader("Content-Type", textPlain).
+			Post(url)
 		if err != nil {
 			return err
 		}
@@ -351,6 +358,63 @@ func (a *Agent) sendMetrics(metrics []*models.Metrics) error {
 	}
 	// Should we reset a.PollCount here?
 	return nil
+}
+
+func (a *Agent) sendMetricsJSON(metrics []*models.Metrics, gzipEnabled bool) error {
+	url := fmt.Sprintf("http://%s/update", a.cfg.ServerAddress)
+	for _, m := range metrics {
+		body, err := json.Marshal(m) // use resty https://resty.dev/docs/content-type-encoder-and-decoder/#in-memory-marshal-and-unmarshal
+		if err != nil {
+			return err
+		}
+
+		req := a.client.R().
+			SetHeader("Content-Type", applicationJSON)
+
+		if gzipEnabled {
+			body, err = gzipCompressJSON(body)
+			if err != nil {
+				return err
+			}
+
+			req.SetHeader("Content-Encoding", gzipEncoding)
+		}
+
+		resp, err := req.SetHeader("Content-Type", applicationJSON).
+			SetBody(body).
+			Post(url)
+
+		if err != nil {
+			return err
+		}
+
+		if resp.IsError() {
+			return fmt.Errorf("server returned status %s", resp.Status())
+		}
+	}
+
+	return nil
+}
+
+func gzipCompressJSON(body []byte) ([]byte, error) {
+	var b bytes.Buffer
+
+	gzWriter, err := gzip.NewWriterLevel(&b, gzip.BestSpeed)
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = gzWriter.Write(body)
+	if err != nil {
+		gzWriter.Close()
+		return nil, err
+	}
+
+	if err := gzWriter.Close(); err != nil {
+		return nil, err
+	}
+
+	return b.Bytes(), nil
 }
 
 func (a *Agent) createURLFromMetric(m *models.Metrics) string {

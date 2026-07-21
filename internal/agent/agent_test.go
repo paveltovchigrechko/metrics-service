@@ -5,7 +5,6 @@ import (
 	"net/http/httptest"
 	"runtime"
 	"strings"
-	"sync"
 	"testing"
 
 	"github.com/paveltovchigrechko/metrics-service/internal/config"
@@ -29,13 +28,10 @@ func TestNewAgent(t *testing.T) {
 
 func TestSendMetrics(t *testing.T) {
 	t.Run("successfully sends counter and gauge metrics", func(t *testing.T) {
-		var mu sync.Mutex
 		var receivedPaths []string
 
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			mu.Lock()
 			receivedPaths = append(receivedPaths, r.URL.Path)
-			mu.Unlock()
 			w.WriteHeader(http.StatusOK)
 		}))
 		defer server.Close()
@@ -54,11 +50,9 @@ func TestSendMetrics(t *testing.T) {
 		gaugeMetric, err := models.CreateMetrics("Alloc", models.Gauge, 0, 123.45)
 		require.NoError(t, err)
 
-		err = a.sendMetrics([]*models.Metrics{counterMetric, gaugeMetric})
+		err = a.sendMetricsURL([]*models.Metrics{counterMetric, gaugeMetric})
 		require.NoError(t, err)
 
-		mu.Lock()
-		defer mu.Unlock()
 		require.Len(t, receivedPaths, 2)
 		assert.Equal(t, "/update/counter/PollCount/10", receivedPaths[0])
 		assert.Equal(t, "/update/gauge/Alloc/123.45", receivedPaths[1])
@@ -73,7 +67,7 @@ func TestSendMetrics(t *testing.T) {
 		metric, err := models.CreateMetrics("Alloc", models.Gauge, 0, 1.0)
 		require.NoError(t, err)
 
-		err = a.sendMetrics([]*models.Metrics{metric})
+		err = a.sendMetricsURL([]*models.Metrics{metric})
 		assert.Error(t, err)
 	})
 
@@ -93,7 +87,7 @@ func TestSendMetrics(t *testing.T) {
 		m2, err := models.CreateMetrics("Frees", models.Gauge, 0, 2.0)
 		require.NoError(t, err)
 
-		err = a.sendMetrics([]*models.Metrics{m1, m2})
+		err = a.sendMetricsURL([]*models.Metrics{m1, m2})
 		assert.Error(t, err)
 	})
 
@@ -103,7 +97,7 @@ func TestSendMetrics(t *testing.T) {
 		require.Nil(t, err)
 		a := NewAgent(cfg)
 
-		err = a.sendMetrics([]*models.Metrics{})
+		err = a.sendMetricsURL([]*models.Metrics{})
 		assert.NoError(t, err)
 	})
 }

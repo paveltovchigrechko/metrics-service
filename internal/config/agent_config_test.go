@@ -5,116 +5,180 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
-func TestSetAgentConfig(t *testing.T) {
+func TestSetAgentConfig_Success(t *testing.T) {
 	testCases := []struct {
 		name       string
 		args       []string
+		envVars    map[string]string
 		wantAddr   string
 		wantReport time.Duration
 		wantPoll   time.Duration
-		wantErr    error
 	}{
 		{
-			name:       "uses default config parameters when no flags are provided",
+			name:       "Default values when no env or flags are set",
 			args:       []string{},
+			envVars:    map[string]string{},
 			wantAddr:   "localhost:8080",
 			wantReport: 10 * time.Second,
 			wantPoll:   2 * time.Second,
-			wantErr:    nil,
 		},
 		{
-			name:       "overrides all config parameters cleanly via custom flags",
+			name:       "Flags are parsed correctly with no env present",
 			args:       []string{"-a", "127.0.0.1:9090", "-r", "30", "-p", "5"},
+			envVars:    map[string]string{},
 			wantAddr:   "127.0.0.1:9090",
 			wantReport: 30 * time.Second,
 			wantPoll:   5 * time.Second,
-			wantErr:    nil,
 		},
 		{
-			name:       "fails validation if report interval is zero or negative",
-			args:       []string{"-r", "0"},
-			wantAddr:   "",
-			wantReport: 0,
-			wantPoll:   0,
-			wantErr:    errIncorrectInterval,
+			name: "Env variables completely override flag configurations",
+			args: []string{"-a", "127.0.0.1:9090", "-r", "30", "-p", "5"},
+			envVars: map[string]string{
+				"ADDRESS":         "0.0.0.0:3000",
+				"REPORT_INTERVAL": "40",
+				"POLL_INTERVAL":   "10",
+			},
+			wantAddr:   "0.0.0.0:3000",
+			wantReport: 40 * time.Second,
+			wantPoll:   10 * time.Second,
 		},
 		{
-			name:       "fails validation if poll interval is zero or negative",
-			args:       []string{"-p", "-5"},
-			wantAddr:   "",
-			wantReport: 0,
-			wantPoll:   0,
-			wantErr:    errIncorrectInterval,
-		},
-		{
-			name:       "returns error when an unknown flag is specified",
-			args:       []string{"-unknown-flag"},
-			wantAddr:   "",
-			wantReport: 0,
-			wantPoll:   0,
-			wantErr:    assert.AnError,
+			name: "Partial Env overrides only address",
+			args: []string{"-a", "127.0.0.1:9090", "-r", "30", "-p", "5"},
+			envVars: map[string]string{
+				"ADDRESS": "0.0.0.0:3000",
+			},
+			wantAddr:   "0.0.0.0:3000",
+			wantReport: 30 * time.Second,
+			wantPoll:   5 * time.Second,
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			cfg, err := SetAgentConfig(tc.args)
+			// Clear testing sandbox envs
+			t.Setenv("ADDRESS", "")
+			t.Setenv("REPORT_INTERVAL", "")
+			t.Setenv("POLL_INTERVAL", "")
 
-			if tc.wantErr != nil {
-				assert.Error(t, err)
-
-				if tc.wantErr == errIncorrectInterval {
-					assert.ErrorIs(t, err, errIncorrectInterval)
-				}
-				assert.Nil(t, cfg)
-			} else {
-				assert.NoError(t, err)
-				assert.NotNil(t, cfg)
-				assert.Equal(t, tc.wantAddr, cfg.ServerAddress)
-				assert.Equal(t, tc.wantReport, cfg.ReportInterval)
-				assert.Equal(t, tc.wantPoll, cfg.PollInterval)
+			for k, v := range tc.envVars {
+				t.Setenv(k, v)
 			}
+
+			cfg, err := SetAgentConfig(tc.args)
+			require.NoError(t, err)
+			require.NotNil(t, cfg)
+
+			assert.Equal(t, tc.wantAddr, cfg.ServerAddress)
+			assert.Equal(t, tc.wantReport, cfg.ReportInterval)
+			assert.Equal(t, tc.wantPoll, cfg.PollInterval)
 		})
 	}
 }
 
-func TestValidateIntervals(t *testing.T) {
-	testCases := []struct {
-		name        string
-		reportInt   int
-		pollInt     int
-		expectedErr error
-	}{
-		{
-			name:        "both intervals positive is valid",
-			reportInt:   10,
-			pollInt:     2,
-			expectedErr: nil,
-		},
-		{
-			name:        "zero report interval is invalid",
-			reportInt:   0,
-			pollInt:     2,
-			expectedErr: errIncorrectInterval,
-		},
-		{
-			name:        "negative poll interval is invalid",
-			reportInt:   10,
-			pollInt:     -1,
-			expectedErr: errIncorrectInterval,
-		},
-	}
+func TestSetAgentConfig_Failures(t *testing.T) {
+	t.Run("fails on invalid flag structure", func(t *testing.T) {
+		cfg, err := SetAgentConfig([]string{"-invalid-arg"})
+		assert.Error(t, err)
+		assert.Nil(t, cfg)
+	})
 
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			err := validateIntervals(tc.reportInt, tc.pollInt)
-			if tc.expectedErr == nil {
-				assert.NoError(t, err)
-			} else {
-				assert.ErrorIs(t, err, tc.expectedErr)
-			}
-		})
-	}
+	t.Run("fails on invalid environment address with validation error", func(t *testing.T) {
+		t.Setenv("ADDRESS", "   ") // empty address check
+		cfg, err := SetAgentConfig([]string{})
+		assert.Error(t, err)
+		assert.Nil(t, cfg)
+	})
+
+	t.Run("fails when environment variable types are mismatched", func(t *testing.T) {
+		t.Setenv("REPORT_INTERVAL", "invalid-type")
+		cfg, err := SetAgentConfig([]string{})
+		assert.Error(t, err)
+		assert.Nil(t, cfg)
+	})
+
+	t.Run("fails on negative/zero report interval with descriptive error", func(t *testing.T) {
+		cfg, err := SetAgentConfig([]string{"-r", "0"})
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errIncorrectInterval)
+		assert.Nil(t, cfg)
+	})
+
+	t.Run("fails on negative/zero poll interval with descriptive error", func(t *testing.T) {
+		cfg, err := SetAgentConfig([]string{"-p", "-3"})
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errIncorrectInterval)
+		assert.Nil(t, cfg)
+	})
+}
+
+func TestCreateAgentFlagConfig(t *testing.T) {
+	t.Run("should correctly parse flag options into agent config struct", func(t *testing.T) {
+		args := []string{"-a", "10.0.0.1:1337", "-r", "60", "-p", "12"}
+		cfg, err := createAgentFlagConfig(args)
+
+		require.NoError(t, err)
+		require.NotNil(t, cfg)
+		assert.Equal(t, "10.0.0.1:1337", cfg.ServerAddress)
+		assert.Equal(t, 60*time.Second, cfg.ReportInterval)
+		assert.Equal(t, 12*time.Second, cfg.PollInterval)
+	})
+}
+
+func TestCreateAgentEnvConfig(t *testing.T) {
+	t.Run("parses non-empty env configs cleanly", func(t *testing.T) {
+		t.Setenv("ADDRESS", "192.168.1.1:80")
+		t.Setenv("REPORT_INTERVAL", "15")
+		t.Setenv("POLL_INTERVAL", "3")
+
+		envCfg, err := createAgentEnvConfig()
+		require.NoError(t, err)
+		require.NotNil(t, envCfg)
+
+		assert.Equal(t, "192.168.1.1:80", *envCfg.ServerAddress)
+		assert.Equal(t, 15, *envCfg.ReportInterval)
+		assert.Equal(t, 3, *envCfg.PollInterval)
+	})
+
+	t.Run("avoids pointer dereferences on empty environment (returns nils)", func(t *testing.T) {
+		t.Setenv("ADDRESS", "")
+		t.Setenv("REPORT_INTERVAL", "")
+		t.Setenv("POLL_INTERVAL", "")
+
+		envCfg, err := createAgentEnvConfig()
+		require.NoError(t, err)
+		require.NotNil(t, envCfg)
+
+		assert.Nil(t, envCfg.ServerAddress)
+		assert.Nil(t, envCfg.ReportInterval)
+		assert.Nil(t, envCfg.PollInterval)
+	})
+}
+
+func TestMergeAgentConfigs(t *testing.T) {
+	strPtr := func(s string) *string { return &s }
+	intPtr := func(i int) *int { return &i }
+
+	t.Run("overwrites config with env parameters when pointers are filled", func(t *testing.T) {
+		flagCfg := &AgentConfig{
+			ServerAddress:  "flag:80",
+			ReportInterval: 5 * time.Second,
+			PollInterval:   1 * time.Second,
+		}
+
+		envCfg := &envAgentConfig{
+			ServerAddress:  strPtr("env:80"),
+			ReportInterval: intPtr(100),
+			PollInterval:   intPtr(20),
+		}
+
+		merged := mergeAgentConfigs(envCfg, flagCfg)
+		require.NotNil(t, merged)
+		assert.Equal(t, "env:80", merged.ServerAddress)
+		assert.Equal(t, 100*time.Second, merged.ReportInterval)
+		assert.Equal(t, 20*time.Second, merged.PollInterval)
+	})
 }

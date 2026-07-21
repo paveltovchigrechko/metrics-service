@@ -1,26 +1,29 @@
-package models
+package model
 
 import (
 	"errors"
-	"fmt"
-	"io"
-	"sort"
-	"text/tabwriter"
+	"strings"
+	"sync"
 )
 
 type Storage interface {
-	GetMetrics(string) (*Metrics, error)
-	ListMetrics(io.Writer)
+	GetMetrics(string, string) (*Metrics, error)
 	SaveMetrics(*Metrics) error
+	RestoreMetrics(m *Metrics) error
+	GetAllMetrics() []Metrics
 }
 
 type MemStorage struct {
+	mu sync.RWMutex
+
 	Metrics map[string]*Metrics
 }
 
-const noMetricsMessage = "Currently there are no metrics to display\n"
-
-var errMetricsNotFound = errors.New("metrics not found")
+var (
+	errMetricsNotFound = errors.New("metrics not found")
+	ErrDeltaIsNil      = errors.New("counter metrics delta is nil")
+	ErrValueIsNil      = errors.New("gauge metrics value is nil")
+)
 
 func NewMemStorage() *MemStorage {
 	return &MemStorage{
@@ -28,8 +31,13 @@ func NewMemStorage() *MemStorage {
 	}
 }
 
-func (ms *MemStorage) GetMetrics(name string) (*Metrics, error) {
-	metrics, ok := ms.Metrics[name]
+func (ms *MemStorage) GetMetrics(name, mtype string) (*Metrics, error) {
+	// Protect storage from overriding. Not necessary for current implementation.
+	ms.mu.RLock()
+	defer ms.mu.RUnlock()
+
+	key := metricKey(name, mtype)
+	metrics, ok := ms.Metrics[key]
 	if !ok {
 		return nil, errMetricsNotFound
 	}
@@ -38,49 +46,73 @@ func (ms *MemStorage) GetMetrics(name string) (*Metrics, error) {
 }
 
 func (ms *MemStorage) SaveMetrics(m *Metrics) error {
-	current, existing := ms.Metrics[m.ID]
+	// Protect storage from overriding. Not necessary for current implementation.
+	ms.mu.Lock()
+	defer ms.mu.Unlock()
+
+	if m.MType != Counter && m.MType != Gauge {
+		return ErrUnknownMetricsType
+	}
+
+	key := metricKey(m.ID, m.MType)
+	current, existing := ms.Metrics[key]
 	if !existing {
-		ms.Metrics[m.ID] = m
+		ms.Metrics[key] = m
 		return nil
 	}
 
 	switch m.MType {
 	case Counter:
+		if m.Delta == nil {
+			return ErrDeltaIsNil
+		}
 		newValue := *current.Delta + *m.Delta
 		current.Delta = &newValue
 	case Gauge:
+		if m.Value == nil {
+			return ErrValueIsNil
+		}
 		current.Value = m.Value
 	default:
-		return errIncorrectMetricsType
+		return ErrUnknownMetricsType
 	}
 	return nil
 }
 
-func (ms *MemStorage) ListMetrics(w io.Writer) {
-	if len(ms.Metrics) == 0 {
-		w.Write([]byte(noMetricsMessage))
-		return
+// RestoreMetrics
+func (ms *MemStorage) RestoreMetrics(m *Metrics) error {
+	if m.MType != Counter && m.MType != Gauge {
+		return ErrUnknownMetricsType
+	}
+	if m.MType == Counter && m.Delta == nil {
+		return ErrDeltaIsNil
+	}
+	if m.MType == Gauge && m.Value == nil {
+		return ErrValueIsNil
+	}
+	if strings.Trim(m.ID, " ") == "" {
+		return ErrEmptyMetricsID
 	}
 
-	names := make([]string, 0, len(ms.Metrics))
-	for name := range ms.Metrics {
-		names = append(names, name)
+	key := metricKey(m.ID, m.MType)
+	ms.Metrics[key] = m
+
+	return nil
+}
+
+func (ms *MemStorage) GetAllMetrics() []Metrics {
+	// This method is called by server, so we must protect the storage for reading, because a handler might update the storage when server reads it.
+	ms.mu.RLock()
+	defer ms.mu.RUnlock()
+
+	metrics := make([]Metrics, 0)
+	for _, m := range ms.Metrics {
+		metrics = append(metrics, *m)
 	}
 
-	sort.Strings(names)
+	return metrics
+}
 
-	tw := tabwriter.NewWriter(w, 0, 8, 2, ' ', 0)
-	defer tw.Flush()
-
-	fmt.Fprintf(tw, "Name\tValue\n")
-	fmt.Fprintf(tw, "----\t-----\n")
-
-	for _, name := range names {
-		switch ms.Metrics[name].MType {
-		case Counter:
-			fmt.Fprintf(tw, "%s\t%d\n", ms.Metrics[name].ID, *ms.Metrics[name].Delta)
-		case Gauge:
-			fmt.Fprintf(tw, "%s\t%.2f\n", ms.Metrics[name].ID, *ms.Metrics[name].Value)
-		}
-	}
+func metricKey(name, mtype string) string {
+	return mtype + ":" + name
 }

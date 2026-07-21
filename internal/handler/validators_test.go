@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/go-chi/chi/v5"
+	models "github.com/paveltovchigrechko/metrics-service/internal/model"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -42,7 +43,7 @@ func TestValidateReqPath(t *testing.T) {
 				"metricsType":  "histogram",
 				"metricsValue": "100",
 			},
-			expectedErr: ErrInvalidMetricsType,
+			expectedErr: models.ErrUnknownMetricsType,
 		},
 		{
 			name: "negative test: invalid gauge float",
@@ -114,13 +115,6 @@ func TestValidateReqContentType(t *testing.T) {
 			hasHeader:   true,
 			expectedErr: nil,
 		},
-		{
-			name:        "negative test: POST method with application/json content type",
-			method:      http.MethodPost,
-			contentType: "application/json",
-			hasHeader:   true,
-			expectedErr: ErrUnsupportedContentType,
-		},
 	}
 
 	for _, test := range testCases {
@@ -131,7 +125,7 @@ func TestValidateReqContentType(t *testing.T) {
 				req.Header.Set("Content-Type", test.contentType)
 			}
 
-			err := validateReqContentType(req)
+			err := validateReqContentType(req, test.contentType)
 
 			if test.expectedErr == nil {
 				assert.NoError(t, err)

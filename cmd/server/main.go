@@ -2,9 +2,12 @@ package main
 
 import (
 	"log"
-	"net/http"
+	"os"
 
-	"github.com/paveltovchigrechko/metrics-service/internal/router"
+	"github.com/paveltovchigrechko/metrics-service/internal/config"
+	"github.com/paveltovchigrechko/metrics-service/internal/logger"
+	"github.com/paveltovchigrechko/metrics-service/internal/middleware"
+	"github.com/paveltovchigrechko/metrics-service/internal/server"
 )
 
 func main() {
@@ -12,12 +15,23 @@ func main() {
 }
 
 func run() {
-	r, cfg, err := router.PrepareServerRouterAndConfig()
+	cfg, err := config.SetServerConfig(os.Args[1:])
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	err = http.ListenAndServe(cfg.ServerAddress, r)
+	l, err := logger.New()
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer l.Sync() // Flush at the end
+
+	serv, err := server.NewServer(cfg, logger.LoggerMiddleware(l), middleware.GZIPMiddleware)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	err = serv.Run()
 	if err != nil {
 		log.Fatal(err)
 	}

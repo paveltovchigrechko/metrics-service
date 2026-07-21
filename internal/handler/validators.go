@@ -11,12 +11,12 @@ import (
 )
 
 const (
-	contentType = "Content-Type"
-	textPlain   = "text/plain"
+	contentType     = "Content-Type"
+	textPlain       = "text/plain"
+	applicationJSON = "application/json"
 )
 
 var (
-	ErrInvalidMetricsType     = errors.New("Invalid metrics type")
 	ErrInvalidMetricsValue    = errors.New("Invalid metric value")
 	ErrInvalidRequestMethod   = errors.New("Invalid request method")
 	ErrUnsupportedContentType = errors.New("Unsupported content type")
@@ -25,7 +25,7 @@ var (
 func validateMetricsType(req *http.Request) error {
 	metricsType := chi.URLParam(req, "metricsType")
 	if metricsType != models.Counter && metricsType != models.Gauge {
-		return ErrInvalidMetricsType
+		return models.ErrUnknownMetricsType
 	}
 
 	return nil
@@ -64,14 +64,14 @@ func validateReqPath(req *http.Request) error {
 	return nil
 }
 
-func validateReqContentType(req *http.Request) error {
+func validateReqContentType(req *http.Request, ctype string) error {
 	ct := req.Header.Get(contentType)
 
 	if ct == "" {
 		return nil
 	}
 
-	if !strings.HasPrefix(ct, textPlain) {
+	if !strings.HasPrefix(ct, ctype) {
 		return ErrUnsupportedContentType
 	}
 
