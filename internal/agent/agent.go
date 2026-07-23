@@ -360,7 +360,7 @@ func (a *Agent) sendMetricsURL(metrics []*models.Metrics) error {
 	return nil
 }
 
-func (a *Agent) sendMetricsJSON(metrics []*models.Metrics, gzipEnabled bool) error {
+func (a *Agent) sendMetricsJSON(metrics []*models.Metrics, gzipCompressed bool) error {
 	url := fmt.Sprintf("http://%s/update", a.cfg.ServerAddress)
 	for _, m := range metrics {
 		body, err := json.Marshal(m) // use resty https://resty.dev/docs/content-type-encoder-and-decoder/#in-memory-marshal-and-unmarshal
@@ -371,7 +371,7 @@ func (a *Agent) sendMetricsJSON(metrics []*models.Metrics, gzipEnabled bool) err
 		req := a.client.R().
 			SetHeader("Content-Type", applicationJSON)
 
-		if gzipEnabled {
+		if gzipCompressed {
 			body, err = gzipCompressJSON(body)
 			if err != nil {
 				return err

@@ -13,11 +13,6 @@ import (
 	models "github.com/paveltovchigrechko/metrics-service/internal/model"
 )
 
-const (
-	introText        = "<h2>Welcome to the Metrics service</h2>"
-	noMetricsMessage = "<p>Currently, there are no metrics to display</p>"
-)
-
 type AppHandler struct {
 	storage models.Storage
 

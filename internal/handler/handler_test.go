@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -25,7 +24,6 @@ func ptr[T any](v T) *T {
 // MockStorage implements models.Storage explicitly.
 type MockStorage struct {
 	OnGetMetrics     func(string, string) (*models.Metrics, error)
-	OnListMetrics    func(io.Writer)
 	OnSaveMetrics    func(*models.Metrics) error
 	OnRestoreMetrics func(*models.Metrics) error
 	OnGetAllMetrics  func() []models.Metrics
@@ -36,12 +34,6 @@ func (m *MockStorage) GetMetrics(name, mtype string) (*models.Metrics, error) {
 		return m.OnGetMetrics(name, mtype)
 	}
 	return nil, nil
-}
-
-func (m *MockStorage) ListMetrics(w io.Writer) {
-	if m.OnListMetrics != nil {
-		m.OnListMetrics(w)
-	}
 }
 
 func (m *MockStorage) SaveMetrics(mt *models.Metrics) error {

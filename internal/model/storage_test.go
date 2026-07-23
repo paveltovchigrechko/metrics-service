@@ -3,7 +3,6 @@ package model
 import (
 	"encoding/json"
 	"errors"
-	"io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -199,8 +198,6 @@ func (m *MockStorage) RestoreMetrics(metric *Metrics) error {
 func (m *MockStorage) GetMetrics(name, mtype string) (*Metrics, error) {
 	return nil, nil
 }
-
-func (m *MockStorage) ListMetrics(w io.Writer) {}
 
 func (m *MockStorage) SaveMetrics(metric *Metrics) error {
 	return nil
