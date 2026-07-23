@@ -1,11 +1,13 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
 	"strconv"
 	"text/template"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/paveltovchigrechko/metrics-service/internal/common"
@@ -13,8 +15,20 @@ import (
 	models "github.com/paveltovchigrechko/metrics-service/internal/model"
 )
 
+const databasePingTimeout = 3 * time.Second
+
+var (
+	errNoDatabase          = errors.New("no database configured")
+	errDatabaseUnreachable = errors.New("cannot ping database")
+)
+
+type Pinger interface {
+	PingContext(ctx context.Context) error
+}
+
 type AppHandler struct {
 	storage models.Storage
+	pinger  Pinger
 
 	// A callback for synchronous writing metrics to a FileStorage.
 	// Should be used by server.Server if config.ServerConfig.StoreInterval == 0.
@@ -22,9 +36,10 @@ type AppHandler struct {
 	afterSuccessfulUpdate func() error
 }
 
-func NewHandler(s models.Storage, updateFunc func() error) *AppHandler {
+func NewHandler(s models.Storage, p Pinger, updateFunc func() error) *AppHandler {
 	h := &AppHandler{
 		storage:               s,
+		pinger:                p,
 		afterSuccessfulUpdate: updateFunc,
 	}
 
@@ -176,6 +191,22 @@ func (h *AppHandler) ValueEndpoint(w http.ResponseWriter, req *http.Request) {
 	if _, err = w.Write(encodedMetrics); err != nil {
 		WriteError(w, err, http.StatusInternalServerError)
 	}
+}
+
+func (h *AppHandler) PingEndpoint(w http.ResponseWriter, req *http.Request) {
+	if h.pinger == nil {
+		WriteError(w, errNoDatabase, http.StatusInternalServerError)
+		return
+	}
+	ctx, cancel := context.WithTimeout(req.Context(), databasePingTimeout)
+	defer cancel()
+
+	if err := h.pinger.PingContext(ctx); err != nil {
+		WriteError(w, errDatabaseUnreachable, http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
 }
 
 func (h *AppHandler) processMetrics(req *http.Request) error {

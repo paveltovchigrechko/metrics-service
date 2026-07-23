@@ -72,7 +72,7 @@ func newRequestWithChiParams(method, target string, params map[string]string) *h
 
 func TestNewHandler(t *testing.T) {
 	s := models.NewMemStorage()
-	h := NewHandler(s, nil)
+	h := NewHandler(s, nil, nil)
 
 	assert.NotNil(t, h)
 	assert.NotNil(t, h.storage)
@@ -166,7 +166,7 @@ func TestPostMetrics(t *testing.T) {
 			if test.updateErr != nil {
 				updateFunc = func() error { return test.updateErr }
 			}
-			h := NewHandler(s, updateFunc)
+			h := NewHandler(s, nil, updateFunc)
 			r := chi.NewRouter()
 
 			r.Method(http.MethodPost, "/update/{metricsType}/{metricsName}/{metricsValue}", http.HandlerFunc(h.PostMetrics))
@@ -205,7 +205,7 @@ func TestMainPage(t *testing.T) {
 				}
 			},
 		}
-		h := NewHandler(mockStorage, nil)
+		h := NewHandler(mockStorage, nil, nil)
 
 		req := httptest.NewRequest(http.MethodGet, "/", nil)
 		w := httptest.NewRecorder()
@@ -231,7 +231,7 @@ func TestMainPage(t *testing.T) {
 				return []models.Metrics{}
 			},
 		}
-		h := NewHandler(mockStorage, nil)
+		h := NewHandler(mockStorage, nil, nil)
 
 		req := httptest.NewRequest(http.MethodGet, "/", nil)
 		w := httptest.NewRecorder()
@@ -302,7 +302,7 @@ func TestMetricsValue(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			h := NewHandler(tt.mockStorage(), nil)
+			h := NewHandler(tt.mockStorage(), nil, nil)
 			req := newRequestWithChiParams(http.MethodGet, "/", tt.params)
 			w := httptest.NewRecorder()
 
@@ -370,7 +370,7 @@ func TestUpdateEndpoint(t *testing.T) {
 			if tt.updateErr != nil {
 				updateFunc = func() error { return tt.updateErr }
 			}
-			h := NewHandler(s, updateFunc)
+			h := NewHandler(s, nil, updateFunc)
 
 			req := httptest.NewRequest(http.MethodPost, "/update", strings.NewReader(tt.body))
 			if tt.contentType != "" {
@@ -461,7 +461,7 @@ func TestValueEndpoint(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			h := NewHandler(tt.setupStorage(), nil)
+			h := NewHandler(tt.setupStorage(), nil, nil)
 
 			req := httptest.NewRequest(http.MethodPost, "/value", strings.NewReader(tt.body))
 			if tt.contentType != "" {
@@ -541,7 +541,7 @@ func TestProcessMetrics(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			s := models.NewMemStorage()
-			h := NewHandler(s, nil)
+			h := NewHandler(s, nil, nil)
 
 			err := h.processMetrics(tc.req)
 

@@ -1,6 +1,7 @@
 package server
 
 import (
+	"database/sql"
 	"errors"
 	"log"
 	"net/http"
@@ -8,6 +9,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/paveltovchigrechko/metrics-service/internal/config"
 	"github.com/paveltovchigrechko/metrics-service/internal/handler"
 	models "github.com/paveltovchigrechko/metrics-service/internal/model"
@@ -19,6 +21,7 @@ type Server struct {
 	router      *chi.Mux
 	storage     models.Storage
 	fileStorage *models.FileStorage
+	db          *sql.DB
 }
 
 func NewServer(c *config.ServerConfig, middlewares ...func(http.Handler) http.Handler) (*Server, error) {
@@ -35,14 +38,30 @@ func NewServer(c *config.ServerConfig, middlewares ...func(http.Handler) http.Ha
 		return nil, err
 	}
 
+	var db *sql.DB
+	if c.DatabaseDSN != "" {
+		db, err = sql.Open("pgx", c.DatabaseDSN)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		db = nil
+	}
+
 	var h *handler.AppHandler
+	var pinger handler.Pinger
+	if db != nil {
+		pinger = db
+	} else {
+		pinger = nil
+	}
 	if c.StoreInterval == 0 {
 		updateFunc := func() error {
 			return fs.Save(storage)
 		}
-		h = handler.NewHandler(storage, updateFunc)
+		h = handler.NewHandler(storage, pinger, updateFunc)
 	} else {
-		h = handler.NewHandler(storage, nil) // We don't need the callback for synchronous writing to file.
+		h = handler.NewHandler(storage, pinger, nil) // We don't need the callback for synchronous writing to file.
 	}
 
 	r := chi.NewRouter()
@@ -53,6 +72,7 @@ func NewServer(c *config.ServerConfig, middlewares ...func(http.Handler) http.Ha
 		router:      r,
 		storage:     storage,
 		fileStorage: fs,
+		db:          db,
 	}
 
 	s.useMiddlewares(middlewares...) // Set middlewares before setting handlers
@@ -69,6 +89,13 @@ func (s *Server) Run() error {
 	return http.ListenAndServe(s.cfg.ServerAddress, s.router)
 }
 
+func (s *Server) StopDB() error {
+	if s.db == nil {
+		return nil
+	}
+	return s.db.Close()
+}
+
 func (s *Server) useMiddlewares(middlewares ...func(http.Handler) http.Handler) {
 	s.router.Use(middlewares...)
 }
@@ -81,6 +108,7 @@ func (s *Server) setHandlers() {
 	s.router.Post("/value/", s.handler.ValueEndpoint) // Keep for autotests
 	s.router.Get("/", s.handler.MainPage)
 	s.router.Get("/value/{metricsType}/{metricsName}", s.handler.MetricsValue)
+	s.router.Get("/ping", s.handler.PingEndpoint)
 }
 
 func (s *Server) runStoreLoop() {
