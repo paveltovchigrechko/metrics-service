@@ -17,6 +17,7 @@ func TestSetServerConfig_Positive(t *testing.T) {
 		wantInterval time.Duration
 		wantPath     string
 		wantRestore  bool
+		wantDSN      string
 	}{
 		{
 			name:         "Default values when no env or flags are set",
@@ -26,33 +27,37 @@ func TestSetServerConfig_Positive(t *testing.T) {
 			wantInterval: 300 * time.Second,
 			wantPath:     "metrics.json",
 			wantRestore:  true,
+			wantDSN:      "",
 		},
 		{
 			name:         "Flags are parsed correctly when no env is present",
-			args:         []string{"-a", "127.0.0.1:9090", "-i", "10", "-f", "test.json", "-r=false"},
+			args:         []string{"-a", "127.0.0.1:9090", "-i", "10", "-f", "test.json", "-r=false", "-d", "db_address"},
 			envVars:      map[string]string{},
 			wantAddr:     "127.0.0.1:9090",
 			wantInterval: 10 * time.Second,
 			wantPath:     "test.json",
 			wantRestore:  false,
+			wantDSN:      "db_address",
 		},
 		{
 			name: "Env variables override flags completely",
-			args: []string{"-a", "127.0.0.1:9090", "-i", "10", "-f", "test.json", "-r=false"},
+			args: []string{"-a", "127.0.0.1:9090", "-i", "10", "-f", "test.json", "-r=false", "-d", "db_address"},
 			envVars: map[string]string{
 				"ADDRESS":           "0.0.0.0:3000",
 				"STORE_INTERVAL":    "15",
 				"FILE_STORAGE_PATH": "env.json",
 				"RESTORE":           "true",
+				"DATABASE_DSN":      "env_db_address",
 			},
 			wantAddr:     "0.0.0.0:3000",
 			wantInterval: 15 * time.Second,
 			wantPath:     "env.json",
 			wantRestore:  true,
+			wantDSN:      "env_db_address",
 		},
 		{
 			name: "Partial Env overrides only specific flags",
-			args: []string{"-a", "127.0.0.1:9090", "-i", "10"},
+			args: []string{"-a", "127.0.0.1:9090", "-i", "10", "-d", "flag_db_address"},
 			envVars: map[string]string{
 				"ADDRESS": "0.0.0.0:3000",
 			},
@@ -60,6 +65,7 @@ func TestSetServerConfig_Positive(t *testing.T) {
 			wantInterval: 10 * time.Second,
 			wantPath:     "metrics.json",
 			wantRestore:  true,
+			wantDSN:      "flag_db_address",
 		},
 	}
 
@@ -70,6 +76,7 @@ func TestSetServerConfig_Positive(t *testing.T) {
 			t.Setenv("STORE_INTERVAL", "")
 			t.Setenv("FILE_STORAGE_PATH", "")
 			t.Setenv("RESTORE", "")
+			t.Setenv("DATABASE_DSN", "")
 
 			for k, v := range tc.envVars {
 				t.Setenv(k, v)
@@ -83,6 +90,7 @@ func TestSetServerConfig_Positive(t *testing.T) {
 			assert.Equal(t, tc.wantInterval, cfg.StoreInterval)
 			assert.Equal(t, tc.wantPath, cfg.FileStoragePath)
 			assert.Equal(t, tc.wantRestore, cfg.Restore)
+			assert.Equal(t, tc.wantDSN, cfg.DatabaseDSN)
 		})
 	}
 }
@@ -125,7 +133,7 @@ func TestSetServerConfig_Negative(t *testing.T) {
 
 func TestCreateServerFlagConfig(t *testing.T) {
 	t.Run("should parse custom flags successfully", func(t *testing.T) {
-		args := []string{"-a", "127.0.0.1:4444", "-i", "120", "-f", "flag_test.json", "-r=false"}
+		args := []string{"-a", "127.0.0.1:4444", "-i", "120", "-f", "flag_test.json", "-r=false", "-d", "db_address"}
 		cfg, err := createServerFlagConfig(args)
 
 		require.NoError(t, err)
@@ -134,6 +142,7 @@ func TestCreateServerFlagConfig(t *testing.T) {
 		assert.Equal(t, 120*time.Second, cfg.StoreInterval)
 		assert.Equal(t, "flag_test.json", cfg.FileStoragePath)
 		assert.False(t, cfg.Restore)
+		assert.Equal(t, "db_address", cfg.DatabaseDSN)
 	})
 
 	t.Run("should return error on invalid flags", func(t *testing.T) {
@@ -151,6 +160,7 @@ func TestCreateEnvConfig(t *testing.T) {
 		t.Setenv("STORE_INTERVAL", "45")
 		t.Setenv("FILE_STORAGE_PATH", "env_test.json")
 		t.Setenv("RESTORE", "false")
+		t.Setenv("DATABASE_DSN", "env_db_address")
 
 		envCfg, err := parseEnvServerConfig()
 
@@ -161,6 +171,7 @@ func TestCreateEnvConfig(t *testing.T) {
 		assert.Equal(t, 45, *envCfg.StoreInterval)
 		assert.Equal(t, "env_test.json", *envCfg.FileStoragePath)
 		assert.False(t, *envCfg.Restore)
+		assert.Equal(t, "env_db_address", *envCfg.DatabaseDSN)
 	})
 
 	t.Run("should succeed when no env vars are defined (pointers are nil)", func(t *testing.T) {
@@ -168,6 +179,7 @@ func TestCreateEnvConfig(t *testing.T) {
 		t.Setenv("STORE_INTERVAL", "")
 		t.Setenv("FILE_STORAGE_PATH", "")
 		t.Setenv("RESTORE", "")
+		t.Setenv("DATABASE_DSN", "")
 
 		envCfg, err := parseEnvServerConfig()
 
@@ -177,6 +189,7 @@ func TestCreateEnvConfig(t *testing.T) {
 		assert.Nil(t, envCfg.StoreInterval)
 		assert.Nil(t, envCfg.FileStoragePath)
 		assert.Nil(t, envCfg.Restore)
+		assert.Nil(t, envCfg.DatabaseDSN)
 	})
 }
 
@@ -192,6 +205,7 @@ func TestMergeConfigs(t *testing.T) {
 			StoreInterval:   10 * time.Second,
 			FileStoragePath: "flag-file.json",
 			Restore:         true,
+			DatabaseDSN:     "flag_db_address",
 		}
 
 		envCfg := &envServerConfig{
@@ -199,6 +213,7 @@ func TestMergeConfigs(t *testing.T) {
 			StoreInterval:   intPtr(50),
 			FileStoragePath: strPtr("env-file.json"),
 			Restore:         boolPtr(false),
+			DatabaseDSN:     strPtr("env_db_address"),
 		}
 
 		merged := mergeServerConfigs(envCfg, flagCfg)
@@ -208,6 +223,7 @@ func TestMergeConfigs(t *testing.T) {
 		assert.Equal(t, 50*time.Second, merged.StoreInterval)
 		assert.Equal(t, "env-file.json", merged.FileStoragePath)
 		assert.False(t, merged.Restore)
+		assert.Equal(t, "env_db_address", merged.DatabaseDSN)
 	})
 
 	t.Run("should retain flag config values if env pointers are nil", func(t *testing.T) {
@@ -216,6 +232,7 @@ func TestMergeConfigs(t *testing.T) {
 			StoreInterval:   10 * time.Second,
 			FileStoragePath: "flag-file.json",
 			Restore:         true,
+			DatabaseDSN:     "flag_db_address",
 		}
 
 		envCfg := &envServerConfig{
@@ -223,6 +240,7 @@ func TestMergeConfigs(t *testing.T) {
 			StoreInterval:   nil,
 			FileStoragePath: nil,
 			Restore:         nil,
+			DatabaseDSN:     nil,
 		}
 
 		merged := mergeServerConfigs(envCfg, flagCfg)
@@ -232,5 +250,6 @@ func TestMergeConfigs(t *testing.T) {
 		assert.Equal(t, 10*time.Second, merged.StoreInterval)
 		assert.Equal(t, "flag-file.json", merged.FileStoragePath)
 		assert.True(t, merged.Restore)
+		assert.Equal(t, "flag_db_address", merged.DatabaseDSN)
 	})
 }
