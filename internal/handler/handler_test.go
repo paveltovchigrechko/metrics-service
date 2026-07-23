@@ -14,6 +14,9 @@ import (
 	models "github.com/paveltovchigrechko/metrics-service/internal/model"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
+
+	mock_handler "github.com/paveltovchigrechko/metrics-service/mocks"
 )
 
 // Pointer helpers for types
@@ -477,6 +480,67 @@ func TestValueEndpoint(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestAppHandler_PingEndpoint(t *testing.T) {
+	t.Run("returns 200 OK when database responds to ping", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		mockPinger := mock_handler.NewMockPinger(ctrl)
+
+		// Expect PingContext to be called once with any context, returning nil (no error)
+		mockPinger.EXPECT().
+			PingContext(gomock.Any()).
+			Return(nil).
+			Times(1)
+
+		// Create handler with mock pinger (storage can be nil for this test)
+		h := NewHandler(nil, mockPinger, nil)
+
+		req := httptest.NewRequest(http.MethodGet, "/ping", nil)
+		rec := httptest.NewRecorder()
+
+		h.PingEndpoint(rec, req)
+
+		assert.Equal(t, http.StatusOK, rec.Code)
+	})
+
+	t.Run("returns 500 Internal Server Error when database ping fails", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		mockPinger := mock_handler.NewMockPinger(ctrl)
+
+		// Expect PingContext to return a connection error
+		mockPinger.EXPECT().
+			PingContext(gomock.Any()).
+			Return(errors.New("connection refused")).
+			Times(1)
+
+		h := NewHandler(nil, mockPinger, nil)
+
+		req := httptest.NewRequest(http.MethodGet, "/ping", nil)
+		rec := httptest.NewRecorder()
+
+		h.PingEndpoint(rec, req)
+
+		assert.Equal(t, http.StatusInternalServerError, rec.Code)
+		assert.Contains(t, rec.Body.String(), errDatabaseUnreachable.Error())
+	})
+
+	t.Run("returns 500 Internal Server Error when pinger is nil", func(t *testing.T) {
+		// Initialize handler with a nil pinger
+		h := NewHandler(nil, nil, nil)
+
+		req := httptest.NewRequest(http.MethodGet, "/ping", nil)
+		rec := httptest.NewRecorder()
+
+		h.PingEndpoint(rec, req)
+
+		assert.Equal(t, http.StatusInternalServerError, rec.Code)
+		assert.Contains(t, rec.Body.String(), errNoDatabase.Error())
+	})
 }
 
 func TestProcessMetrics(t *testing.T) {
