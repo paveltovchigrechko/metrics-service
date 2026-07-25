@@ -24,38 +24,38 @@ func ptr[T any](v T) *T {
 	return &v
 }
 
-// MockStorage implements models.Storage explicitly.
+// MockStorage implements models.Storage explicitly with context.Context as first argument.
 type MockStorage struct {
-	OnGetMetrics     func(string, string) (*models.Metrics, error)
-	OnSaveMetrics    func(*models.Metrics) error
-	OnRestoreMetrics func(*models.Metrics) error
-	OnGetAllMetrics  func() []models.Metrics
+	OnGetMetrics     func(context.Context, string, string) (*models.Metrics, error)
+	OnSaveMetrics    func(context.Context, *models.Metrics) error
+	OnRestoreMetrics func(context.Context, *models.Metrics) error
+	OnGetAllMetrics  func(context.Context) []models.Metrics
 }
 
-func (m *MockStorage) GetMetrics(name, mtype string) (*models.Metrics, error) {
+func (m *MockStorage) GetMetrics(ctx context.Context, name, mtype string) (*models.Metrics, error) {
 	if m.OnGetMetrics != nil {
-		return m.OnGetMetrics(name, mtype)
+		return m.OnGetMetrics(ctx, name, mtype)
 	}
 	return nil, nil
 }
 
-func (m *MockStorage) SaveMetrics(mt *models.Metrics) error {
+func (m *MockStorage) SaveMetrics(ctx context.Context, mt *models.Metrics) error {
 	if m.OnSaveMetrics != nil {
-		return m.OnSaveMetrics(mt)
+		return m.OnSaveMetrics(ctx, mt)
 	}
 	return nil
 }
 
-func (m *MockStorage) RestoreMetrics(mt *models.Metrics) error {
+func (m *MockStorage) RestoreMetrics(ctx context.Context, mt *models.Metrics) error {
 	if m.OnRestoreMetrics != nil {
-		return m.OnRestoreMetrics(mt)
+		return m.OnRestoreMetrics(ctx, mt)
 	}
 	return nil
 }
 
-func (m *MockStorage) GetAllMetrics() []models.Metrics {
+func (m *MockStorage) GetAllMetrics(ctx context.Context) []models.Metrics {
 	if m.OnGetAllMetrics != nil {
-		return m.OnGetAllMetrics()
+		return m.OnGetAllMetrics(ctx)
 	}
 	return nil
 }
@@ -193,7 +193,7 @@ func TestPostMetrics(t *testing.T) {
 func TestMainPage(t *testing.T) {
 	t.Run("successfully renders html list", func(t *testing.T) {
 		mockStorage := &MockStorage{
-			OnGetAllMetrics: func() []models.Metrics {
+			OnGetAllMetrics: func(ctx context.Context) []models.Metrics {
 				return []models.Metrics{
 					{
 						ID:    "Alloc",
@@ -230,7 +230,7 @@ func TestMainPage(t *testing.T) {
 
 	t.Run("renders empty state message when no metrics exist", func(t *testing.T) {
 		mockStorage := &MockStorage{
-			OnGetAllMetrics: func() []models.Metrics {
+			OnGetAllMetrics: func(ctx context.Context) []models.Metrics {
 				return []models.Metrics{}
 			},
 		}
@@ -262,7 +262,7 @@ func TestMetricsValue(t *testing.T) {
 			},
 			mockStorage: func() models.Storage {
 				m := &MockStorage{}
-				m.OnGetMetrics = func(name, mtype string) (*models.Metrics, error) {
+				m.OnGetMetrics = func(ctx context.Context, name, mtype string) (*models.Metrics, error) {
 					return &models.Metrics{ID: "PollCount", MType: "counter", Delta: ptr(int64(45))}, nil
 				}
 				return m
@@ -278,7 +278,7 @@ func TestMetricsValue(t *testing.T) {
 			},
 			mockStorage: func() models.Storage {
 				m := &MockStorage{}
-				m.OnGetMetrics = func(name, mtype string) (*models.Metrics, error) {
+				m.OnGetMetrics = func(ctx context.Context, name, mtype string) (*models.Metrics, error) {
 					return &models.Metrics{ID: "Alloc", MType: "gauge", Value: ptr(1234.56)}, nil
 				}
 				return m
@@ -294,7 +294,7 @@ func TestMetricsValue(t *testing.T) {
 			},
 			mockStorage: func() models.Storage {
 				m := &MockStorage{}
-				m.OnGetMetrics = func(name, mtype string) (*models.Metrics, error) {
+				m.OnGetMetrics = func(ctx context.Context, name, mtype string) (*models.Metrics, error) {
 					return nil, errors.New("not found")
 				}
 				return m
@@ -403,7 +403,7 @@ func TestValueEndpoint(t *testing.T) {
 			body:        `{"id": "PollCount", "type": "counter"}`,
 			setupStorage: func() models.Storage {
 				m := &MockStorage{}
-				m.OnGetMetrics = func(name, mtype string) (*models.Metrics, error) {
+				m.OnGetMetrics = func(ctx context.Context, name, mtype string) (*models.Metrics, error) {
 					return &models.Metrics{ID: "PollCount", MType: "counter", Delta: ptr(int64(42))}, nil
 				}
 				return m
@@ -417,7 +417,7 @@ func TestValueEndpoint(t *testing.T) {
 			body:        `{"id": "Alloc", "type": "gauge"}`,
 			setupStorage: func() models.Storage {
 				m := &MockStorage{}
-				m.OnGetMetrics = func(name, mtype string) (*models.Metrics, error) {
+				m.OnGetMetrics = func(ctx context.Context, name, mtype string) (*models.Metrics, error) {
 					return &models.Metrics{ID: "Alloc", MType: "gauge", Value: ptr(12.34)}, nil
 				}
 				return m
@@ -431,7 +431,7 @@ func TestValueEndpoint(t *testing.T) {
 			body:        `{"id": "Missing", "type": "gauge"}`,
 			setupStorage: func() models.Storage {
 				m := &MockStorage{}
-				m.OnGetMetrics = func(name, mtype string) (*models.Metrics, error) {
+				m.OnGetMetrics = func(ctx context.Context, name, mtype string) (*models.Metrics, error) {
 					return nil, errors.New("not found")
 				}
 				return m
@@ -453,7 +453,7 @@ func TestValueEndpoint(t *testing.T) {
 			body:        `{"id": "Alloc", "type": "counter"}`, // requesting counter
 			setupStorage: func() models.Storage {
 				m := &MockStorage{}
-				m.OnGetMetrics = func(name, mtype string) (*models.Metrics, error) {
+				m.OnGetMetrics = func(ctx context.Context, name, mtype string) (*models.Metrics, error) {
 					return &models.Metrics{ID: "Alloc", MType: "gauge", Value: ptr(12.34)}, nil // returns gauge
 				}
 				return m
@@ -489,13 +489,11 @@ func TestAppHandler_PingEndpoint(t *testing.T) {
 
 		mockPinger := mock_handler.NewMockPinger(ctrl)
 
-		// Expect PingContext to be called once with any context, returning nil (no error)
 		mockPinger.EXPECT().
 			PingContext(gomock.Any()).
 			Return(nil).
 			Times(1)
 
-		// Create handler with mock pinger (storage can be nil for this test)
 		h := NewHandler(nil, mockPinger, nil)
 
 		req := httptest.NewRequest(http.MethodGet, "/ping", nil)
@@ -512,7 +510,6 @@ func TestAppHandler_PingEndpoint(t *testing.T) {
 
 		mockPinger := mock_handler.NewMockPinger(ctrl)
 
-		// Expect PingContext to return a connection error
 		mockPinger.EXPECT().
 			PingContext(gomock.Any()).
 			Return(errors.New("connection refused")).
@@ -530,7 +527,6 @@ func TestAppHandler_PingEndpoint(t *testing.T) {
 	})
 
 	t.Run("returns 500 Internal Server Error when pinger is nil", func(t *testing.T) {
-		// Initialize handler with a nil pinger
 		h := NewHandler(nil, nil, nil)
 
 		req := httptest.NewRequest(http.MethodGet, "/ping", nil)
@@ -615,7 +611,7 @@ func TestProcessMetrics(t *testing.T) {
 				assert.NoError(t, err)
 			}
 
-			metric, getErr := h.storage.GetMetrics(tc.expectedName, tc.expectedType)
+			metric, getErr := h.storage.GetMetrics(tc.req.Context(), tc.expectedName, tc.expectedType)
 			if tc.expectSaved {
 				require.NoError(t, getErr)
 				require.NotNil(t, metric)

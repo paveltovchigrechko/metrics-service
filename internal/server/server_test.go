@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -27,7 +28,7 @@ func TestNewServer(t *testing.T) {
 			Restore:         false,
 		}
 
-		srv, err := NewServer(cfg)
+		srv, err := New(cfg)
 		require.NoError(t, err)
 		assert.NotNil(t, srv)
 		assert.NotNil(t, srv.storage)
@@ -58,11 +59,11 @@ func TestNewServer(t *testing.T) {
 			Restore:         true,
 		}
 
-		srv, err := NewServer(cfg)
+		srv, err := New(cfg)
 		require.NoError(t, err)
 		assert.NotNil(t, srv)
 
-		restoredMetric, getErr := srv.storage.GetMetrics("ExistingCounter", models.Counter)
+		restoredMetric, getErr := srv.storage.GetMetrics(context.Background(), "ExistingCounter", models.Counter)
 		require.NoError(t, getErr)
 		require.NotNil(t, restoredMetric)
 		assert.Equal(t, int64(120), *restoredMetric.Delta)
@@ -76,7 +77,7 @@ func TestNewServer(t *testing.T) {
 			Restore:         true,
 		}
 
-		srv, err := NewServer(cfg)
+		srv, err := New(cfg)
 		assert.NoError(t, err)
 		assert.NotNil(t, srv)
 	})
@@ -94,7 +95,7 @@ func TestNewServer(t *testing.T) {
 			Restore:         true,
 		}
 
-		srv, err := NewServer(cfg)
+		srv, err := New(cfg)
 		assert.Error(t, err)
 		assert.Nil(t, srv)
 	})
@@ -107,7 +108,7 @@ func TestNewServer(t *testing.T) {
 			Restore:         false,
 		}
 
-		srv, err := NewServer(cfg)
+		srv, err := New(cfg)
 		require.NoError(t, err)
 		assert.NotNil(t, srv)
 
@@ -145,7 +146,7 @@ func TestServer_useMiddlewares(t *testing.T) {
 		})
 	}
 
-	srv, err := NewServer(cfg, dummyMiddleware)
+	srv, err := New(cfg, dummyMiddleware)
 	require.NoError(t, err)
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -163,7 +164,7 @@ func TestServer_setHandlers(t *testing.T) {
 		Restore:         false,
 	}
 
-	srv, err := NewServer(cfg)
+	srv, err := New(cfg)
 	require.NoError(t, err)
 
 	routes := []struct {
@@ -204,11 +205,11 @@ func TestServer_runStoreLoop(t *testing.T) {
 		Restore:         false,
 	}
 
-	srv, err := NewServer(cfg)
+	srv, err := New(cfg)
 	require.NoError(t, err)
 
 	// Inject a metric into local memory store
-	err = srv.storage.SaveMetrics(&models.Metrics{
+	err = srv.storage.SaveMetrics(context.Background(), &models.Metrics{
 		ID:    "ActiveSessions",
 		MType: models.Counter,
 		Delta: int64Ptr(777),

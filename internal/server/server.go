@@ -24,7 +24,7 @@ type Server struct {
 	db          *sql.DB
 }
 
-func NewServer(c *config.ServerConfig, middlewares ...func(http.Handler) http.Handler) (*Server, error) {
+func New(c *config.ServerConfig, middlewares ...func(http.Handler) http.Handler) (*Server, error) {
 	storage := models.NewMemStorage()
 	if c.Restore {
 		err := models.RestoreMetrics(c.FileStoragePath, storage)
@@ -48,14 +48,15 @@ func NewServer(c *config.ServerConfig, middlewares ...func(http.Handler) http.Ha
 		db = nil
 	}
 
-	var h *handler.AppHandler
 	var pinger handler.Pinger
 	if db != nil {
 		pinger = db
 	} else {
 		pinger = nil
 	}
-	if c.StoreInterval == 0 {
+
+	var h *handler.AppHandler
+	if c.StoreInterval == 0 { // Special case: server must synchronously store metrics once they updated.
 		updateFunc := func() error {
 			return fs.Save(storage)
 		}

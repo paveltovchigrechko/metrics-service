@@ -87,7 +87,7 @@ func (h *AppHandler) MainPage(w http.ResponseWriter, req *http.Request) {
 		WriteError(w, err, http.StatusInternalServerError)
 	}
 
-	metrics := h.storage.GetAllMetrics()
+	metrics := h.storage.GetAllMetrics(req.Context())
 
 	if err := t.Execute(w, metrics); err != nil {
 		WriteError(w, err, http.StatusInternalServerError)
@@ -103,7 +103,7 @@ func (h *AppHandler) MetricsValue(w http.ResponseWriter, req *http.Request) {
 
 	metricsName := chi.URLParam(req, "metricsName")
 	metricsType := chi.URLParam(req, "metricsType")
-	metrics, err := h.storage.GetMetrics(metricsName, metricsType)
+	metrics, err := h.storage.GetMetrics(req.Context(), metricsName, metricsType)
 	if err != nil {
 		w.WriteHeader(http.StatusNotFound)
 		return
@@ -136,7 +136,7 @@ func (h *AppHandler) UpdateEndpoint(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	err = h.storage.SaveMetrics(metrics)
+	err = h.storage.SaveMetrics(req.Context(), metrics)
 	if err != nil {
 		WriteError(w, err, http.StatusBadRequest)
 		return
@@ -169,7 +169,7 @@ func (h *AppHandler) ValueEndpoint(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	m, err := h.storage.GetMetrics(name, mType)
+	m, err := h.storage.GetMetrics(req.Context(), name, mType)
 	if err != nil {
 		WriteError(w, err, http.StatusNotFound)
 		return
@@ -216,7 +216,7 @@ func (h *AppHandler) processMetrics(req *http.Request) error {
 		return err
 	}
 
-	return h.storage.SaveMetrics(metrics)
+	return h.storage.SaveMetrics(req.Context(), metrics)
 }
 
 // This function assumes the input url.Url passed validateReqPath().

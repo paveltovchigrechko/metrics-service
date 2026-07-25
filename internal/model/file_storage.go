@@ -1,6 +1,7 @@
 package model
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"os"
@@ -31,7 +32,7 @@ func (fs *FileStorage) Load(storage Storage) error {
 
 func (fs *FileStorage) Save(storage Storage) error {
 	// extract metrics from storage
-	metrics := storage.GetAllMetrics()
+	metrics := storage.GetAllMetrics(context.Background())
 
 	// encode to JSON
 	encodedMetrics, err := json.Marshal(metrics)

@@ -1,6 +1,7 @@
 package model
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"os"
@@ -64,7 +65,7 @@ func RestoreMetrics(path string, storage Storage) error {
 	}
 
 	for i := range metrics {
-		err := storage.RestoreMetrics(&metrics[i])
+		err := storage.RestoreMetrics(context.Background(), &metrics[i])
 		if err != nil {
 			return err // We may want to skip a malformed metrics and try to recover the next one.
 		}

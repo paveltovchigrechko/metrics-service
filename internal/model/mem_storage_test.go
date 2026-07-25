@@ -1,6 +1,7 @@
 package model
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"os"
@@ -143,7 +144,7 @@ func TestMemStorage_SaveAndGetMetrics(t *testing.T) {
 				require.NotNil(t, res)
 				assert.Equal(t, int64(10), *res.Delta)
 
-				gaugeRes, err := s.GetMetrics("Alloc", Gauge)
+				gaugeRes, err := s.GetMetrics(context.Background(), "Alloc", Gauge)
 				require.NoError(t, err)
 				require.NotNil(t, gaugeRes)
 				assert.Equal(t, 55.5, *gaugeRes.Value)
@@ -160,7 +161,7 @@ func TestMemStorage_SaveAndGetMetrics(t *testing.T) {
 
 			var saveErr error
 			if tc.inputMetric != nil {
-				saveErr = s.SaveMetrics(tc.inputMetric)
+				saveErr = s.SaveMetrics(context.Background(), tc.inputMetric)
 				if tc.expectedError != nil && tc.expectedError != errMetricsNotFound {
 					assert.ErrorIs(t, saveErr, tc.expectedError)
 				} else {
@@ -168,7 +169,7 @@ func TestMemStorage_SaveAndGetMetrics(t *testing.T) {
 				}
 			}
 
-			res, getErr := s.GetMetrics(tc.searchName, tc.searchType)
+			res, getErr := s.GetMetrics(context.Background(), tc.searchName, tc.searchType)
 			if tc.expectedError != nil && tc.expectedError == errMetricsNotFound {
 				assert.ErrorIs(t, getErr, tc.expectedError)
 			} else {
@@ -190,20 +191,20 @@ type MockStorage struct {
 	mock.Mock
 }
 
-func (m *MockStorage) RestoreMetrics(metric *Metrics) error {
-	args := m.Called(metric)
+func (m *MockStorage) RestoreMetrics(ctx context.Context, metric *Metrics) error {
+	args := m.Called(ctx, metric)
 	return args.Error(0)
 }
 
-func (m *MockStorage) GetMetrics(name, mtype string) (*Metrics, error) {
+func (m *MockStorage) GetMetrics(ctx context.Context, name, mtype string) (*Metrics, error) {
 	return nil, nil
 }
 
-func (m *MockStorage) SaveMetrics(metric *Metrics) error {
+func (m *MockStorage) SaveMetrics(ctx context.Context, metric *Metrics) error {
 	return nil
 }
 
-func (m *MockStorage) GetAllMetrics() []Metrics {
+func (m *MockStorage) GetAllMetrics(ctx context.Context) []Metrics {
 	args := m.Called()
 	if rf, ok := args.Get(0).([]Metrics); ok {
 		return rf
