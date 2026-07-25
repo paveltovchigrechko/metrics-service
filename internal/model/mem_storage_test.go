@@ -283,7 +283,7 @@ func TestRestoreMetricsMethod(t *testing.T) {
 
 			mockStorage := new(MockStorage)
 			for _, exp := range tc.mockReturns {
-				mockStorage.On("RestoreMetrics", exp.metric).Return(exp.returnError).Once()
+				mockStorage.On("RestoreMetrics", mock.Anything, exp.metric).Return(exp.returnError).Once()
 			}
 
 			err := RestoreMetrics(filePath, mockStorage)

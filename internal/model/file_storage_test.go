@@ -7,9 +7,10 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 )
 
-func TestNewFileStarage(t *testing.T) {
+func TestNewFileStorage(t *testing.T) {
 	testCases := []struct {
 		name string
 		path string
@@ -37,9 +38,11 @@ func TestNewFileStarage(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		fs, err := NewFileStorage(tc.path)
-		assert.Equal(t, fs, tc.fs)
-		assert.Equal(t, err, tc.err)
+		t.Run(tc.name, func(t *testing.T) {
+			fs, err := NewFileStorage(tc.path)
+			assert.Equal(t, tc.fs, fs)
+			assert.Equal(t, tc.err, err)
+		})
 	}
 }
 
@@ -61,11 +64,11 @@ func TestFileStorage_Load(t *testing.T) {
 		assert.NoError(t, err)
 
 		mockStorage := new(MockStorage)
-		// RestoreMetrics is called inside Load
-		mockStorage.On("RestoreMetrics", &testCounter).Return(nil).Once()
+		// Match any context.Context passed as the first parameter
+		mockStorage.On("RestoreMetrics", mock.Anything, &testCounter).Return(nil).Once()
 
 		fs, err := NewFileStorage(filePath)
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 
 		err = fs.Load(mockStorage)
 
@@ -80,7 +83,7 @@ func TestFileStorage_Load(t *testing.T) {
 		mockStorage := new(MockStorage)
 
 		fs, err := NewFileStorage(filePath)
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 
 		err = fs.Load(mockStorage)
 
@@ -109,11 +112,11 @@ func TestFileStorage_Save(t *testing.T) {
 		filePath := filepath.Join(tmpDir, "save.json")
 
 		mockStorage := new(MockStorage)
-		// Save calls GetAllMetrics to fetch the values
-		mockStorage.On("GetAllMetrics").Return(testMetrics).Once()
+		// Match any context.Context passed as the first parameter
+		mockStorage.On("GetAllMetrics", mock.Anything).Return(testMetrics).Once()
 
 		fs, err := NewFileStorage(filePath)
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 
 		err = fs.Save(mockStorage)
 		assert.NoError(t, err)
@@ -136,14 +139,13 @@ func TestFileStorage_Save(t *testing.T) {
 	})
 
 	t.Run("Failed save due to invalid directory path permissions", func(t *testing.T) {
-		// Attempting to write to a path that cannot exist or lacks permissions
 		invalidPath := "/invalid_directory_abc123/backup.json"
 
 		mockStorage := new(MockStorage)
-		mockStorage.On("GetAllMetrics").Return(testMetrics).Once()
+		mockStorage.On("GetAllMetrics", mock.Anything).Return(testMetrics).Once()
 
 		fs, err := NewFileStorage(invalidPath)
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 
 		err = fs.Save(mockStorage)
 

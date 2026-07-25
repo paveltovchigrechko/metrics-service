@@ -8,7 +8,7 @@ import (
 	"strings"
 )
 
-// Idea: make this Storage interface. Server would work with disk only, verey slow and fun.
+// FileStorage represents a local stored JSON-file with metrics.
 type FileStorage struct {
 	path string
 }

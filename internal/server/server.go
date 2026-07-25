@@ -3,6 +3,7 @@ package server
 import (
 	"database/sql"
 	"errors"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -11,8 +12,17 @@ import (
 	"github.com/go-chi/chi/v5"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/paveltovchigrechko/metrics-service/internal/config"
+	"github.com/paveltovchigrechko/metrics-service/internal/config/db"
 	"github.com/paveltovchigrechko/metrics-service/internal/handler"
 	models "github.com/paveltovchigrechko/metrics-service/internal/model"
+)
+
+type storageMode int
+
+const (
+	postgresMode storageMode = iota
+	fileMode
+	memoryMode
 )
 
 type Server struct {
@@ -21,49 +31,62 @@ type Server struct {
 	router      *chi.Mux
 	storage     models.Storage
 	fileStorage *models.FileStorage
-	db          *sql.DB
+	closer      io.Closer // This is for closing database
 }
 
 func New(c *config.ServerConfig, middlewares ...func(http.Handler) http.Handler) (*Server, error) {
-	storage := models.NewMemStorage()
-	if c.Restore {
-		err := models.RestoreMetrics(c.FileStoragePath, storage)
-		if err != nil && !errors.Is(err, os.ErrNotExist) { // We accept non-existent file on the first start.
-			return nil, err
-		}
-	}
+	mode := defineMode(c)
 
-	fs, err := models.NewFileStorage(c.FileStoragePath)
-	if err != nil {
-		return nil, err
-	}
+	// Set up storage
+	var database *sql.DB
+	var storage models.Storage
+	var fs *models.FileStorage
+	var updateFunc func() error
+	var err error
+	var closer io.Closer
 
-	var db *sql.DB
-	if c.DatabaseDSN != "" {
-		db, err = sql.Open("pgx", c.DatabaseDSN)
+	switch mode {
+	case postgresMode:
+		database, err = db.OpenDB(c.DatabaseDSN)
 		if err != nil {
 			return nil, err
 		}
-	} else {
-		db = nil
+		err = db.RunMigrations(database)
+		if err != nil {
+			database.Close()
+			return nil, err
+		}
+		storage = models.NewPostgresStorage(database)
+		closer = database
+	case fileMode:
+		storage = models.NewMemStorage()
+		fs, err = models.NewFileStorage(c.FileStoragePath)
+		if err != nil {
+			return nil, err
+		}
+
+		if c.Restore {
+			err = fs.Load(storage)
+			if err != nil && !errors.Is(err, os.ErrNotExist) { // We accept that file doesn't exist on first startup.
+				return nil, err
+			}
+		}
+
+		if c.StoreInterval == 0 {
+			updateFunc = func() error {
+				return fs.Save(storage)
+			}
+		}
+	case memoryMode:
+		storage = models.NewMemStorage()
 	}
 
 	var pinger handler.Pinger
-	if db != nil {
-		pinger = db
-	} else {
-		pinger = nil
+	if database != nil { //Should I check here for type == PostgresStorage and create pinger from ps.db?
+		pinger = database
 	}
 
-	var h *handler.AppHandler
-	if c.StoreInterval == 0 { // Special case: server must synchronously store metrics once they updated.
-		updateFunc := func() error {
-			return fs.Save(storage)
-		}
-		h = handler.NewHandler(storage, pinger, updateFunc)
-	} else {
-		h = handler.NewHandler(storage, pinger, nil) // We don't need the callback for synchronous writing to file.
-	}
+	h := handler.NewHandler(storage, pinger, updateFunc)
 
 	r := chi.NewRouter()
 
@@ -73,7 +96,7 @@ func New(c *config.ServerConfig, middlewares ...func(http.Handler) http.Handler)
 		router:      r,
 		storage:     storage,
 		fileStorage: fs,
-		db:          db,
+		closer:      closer,
 	}
 
 	s.useMiddlewares(middlewares...) // Set middlewares before setting handlers
@@ -91,10 +114,10 @@ func (s *Server) Run() error {
 }
 
 func (s *Server) StopDB() error {
-	if s.db == nil {
+	if s.closer == nil { // Use storage(type).PostgresStorage.db
 		return nil
 	}
-	return s.db.Close()
+	return s.closer.Close()
 }
 
 func (s *Server) useMiddlewares(middlewares ...func(http.Handler) http.Handler) {
@@ -121,4 +144,16 @@ func (s *Server) runStoreLoop() {
 			log.Printf("save metrics error: %v", err)
 		}
 	}
+}
+
+func defineMode(c *config.ServerConfig) storageMode {
+	if c.DatabaseDSN != "" {
+		return postgresMode
+	}
+
+	if c.FileStoragePath != "" {
+		return fileMode
+	}
+
+	return memoryMode
 }

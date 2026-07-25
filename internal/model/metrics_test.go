@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 )
 
 func int64Ptr(v int64) *int64       { return &v }
@@ -212,7 +213,7 @@ func TestRestoreMetrics(t *testing.T) {
 
 			mockStorage := new(MockStorage)
 			for _, exp := range tc.mockReturns {
-				mockStorage.On("RestoreMetrics", exp.metric).Return(exp.returnError).Once()
+				mockStorage.On("RestoreMetrics", mock.Anything, exp.metric).Return(exp.returnError).Once()
 			}
 
 			err := RestoreMetrics(filePath, mockStorage)
