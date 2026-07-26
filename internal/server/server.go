@@ -106,7 +106,7 @@ func New(c *config.ServerConfig, middlewares ...func(http.Handler) http.Handler)
 }
 
 func (s *Server) Run() error {
-	if s.cfg.StoreInterval > 0 {
+	if s.cfg.StoreInterval > 0 && s.fileStorage != nil {
 		go s.runStoreLoop() // Separate thread for time ticker
 	}
 
