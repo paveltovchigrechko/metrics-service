@@ -52,7 +52,7 @@ func CreateMetrics(name, mtype string, delta int64, value float64) (*Metrics, er
 	return m, nil
 }
 
-func RestoreMetrics(path string, storage Storage) error {
+func SaveMetrics(path string, storage Storage) error {
 	bytes, err := os.ReadFile(path)
 	if err != nil {
 		return err
@@ -65,7 +65,7 @@ func RestoreMetrics(path string, storage Storage) error {
 	}
 
 	for i := range metrics {
-		err := storage.RestoreMetrics(context.Background(), &metrics[i])
+		err := storage.SaveMetrics(context.Background(), &metrics[i])
 		if err != nil {
 			return err // We may want to skip a malformed metrics and try to recover the next one.
 		}

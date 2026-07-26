@@ -3,13 +3,11 @@ package model
 import (
 	"context"
 	"errors"
-	"strings"
 	"sync"
 )
 
 type MemStorage struct {
-	mu sync.RWMutex
-
+	mu      sync.RWMutex
 	Metrics map[string]*Metrics
 }
 
@@ -26,7 +24,6 @@ func NewMemStorage() *MemStorage {
 }
 
 func (ms *MemStorage) GetMetrics(ctx context.Context, name, mtype string) (*Metrics, error) {
-	// Protect storage from overriding. Not necessary for current implementation.
 	ms.mu.RLock()
 	defer ms.mu.RUnlock()
 
@@ -40,11 +37,19 @@ func (ms *MemStorage) GetMetrics(ctx context.Context, name, mtype string) (*Metr
 }
 
 func (ms *MemStorage) SaveMetrics(ctx context.Context, m *Metrics) error {
-	// Protect storage from overriding. Not necessary for current implementation.
 	ms.mu.Lock()
 	defer ms.mu.Unlock()
 
-	if m.MType != Counter && m.MType != Gauge {
+	switch m.MType {
+	case Counter:
+		if m.Delta == nil {
+			return ErrDeltaIsNil
+		}
+	case Gauge:
+		if m.Value == nil {
+			return ErrValueIsNil
+		}
+	default:
 		return ErrUnknownMetricsType
 	}
 
@@ -57,54 +62,25 @@ func (ms *MemStorage) SaveMetrics(ctx context.Context, m *Metrics) error {
 
 	switch m.MType {
 	case Counter:
-		if m.Delta == nil {
-			return ErrDeltaIsNil
-		}
 		newValue := *current.Delta + *m.Delta
 		current.Delta = &newValue
 	case Gauge:
-		if m.Value == nil {
-			return ErrValueIsNil
-		}
 		current.Value = m.Value
-	default:
-		return ErrUnknownMetricsType
 	}
-	return nil
-}
-
-// RestoreMetrics
-func (ms *MemStorage) RestoreMetrics(ctx context.Context, m *Metrics) error {
-	if m.MType != Counter && m.MType != Gauge {
-		return ErrUnknownMetricsType
-	}
-	if m.MType == Counter && m.Delta == nil {
-		return ErrDeltaIsNil
-	}
-	if m.MType == Gauge && m.Value == nil {
-		return ErrValueIsNil
-	}
-	if strings.Trim(m.ID, " ") == "" {
-		return ErrEmptyMetricsID
-	}
-
-	key := metricKey(m.ID, m.MType)
-	ms.Metrics[key] = m
 
 	return nil
 }
 
-func (ms *MemStorage) GetAllMetrics(ctx context.Context) []Metrics {
-	// This method is called by server, so we must protect the storage for reading, because a handler might update the storage when server reads it.
+func (ms *MemStorage) GetAllMetrics(ctx context.Context) ([]Metrics, error) {
 	ms.mu.RLock()
 	defer ms.mu.RUnlock()
 
-	metrics := make([]Metrics, 0)
+	metrics := make([]Metrics, 0, len(ms.Metrics))
 	for _, m := range ms.Metrics {
 		metrics = append(metrics, *m)
 	}
 
-	return metrics
+	return metrics, nil
 }
 
 func metricKey(name, mtype string) string {

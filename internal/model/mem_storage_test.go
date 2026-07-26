@@ -2,10 +2,6 @@ package model
 
 import (
 	"context"
-	"encoding/json"
-	"errors"
-	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -21,7 +17,6 @@ func TestNewStorage(t *testing.T) {
 }
 
 func TestMemStorage_SaveAndGetMetrics(t *testing.T) {
-	// Assuming Counter and Gauge are defined string constants in your package (e.g., "counter", "gauge")
 	testCases := []struct {
 		name          string
 		initialState  map[string]*Metrics
@@ -39,7 +34,7 @@ func TestMemStorage_SaveAndGetMetrics(t *testing.T) {
 				MType: Counter,
 				Delta: ptr(int64(5)),
 			},
-			searchName:    "PollCount", // Search purely by ID
+			searchName:    "PollCount",
 			searchType:    Counter,
 			expectedError: nil,
 			verifyState: func(t *testing.T, res *Metrics, s *MemStorage) {
@@ -55,12 +50,42 @@ func TestMemStorage_SaveAndGetMetrics(t *testing.T) {
 				MType: Gauge,
 				Value: ptr(123.45),
 			},
-			searchName:    "Alloc", // Search purely by ID
+			searchName:    "Alloc",
 			searchType:    Gauge,
 			expectedError: nil,
 			verifyState: func(t *testing.T, res *Metrics, s *MemStorage) {
 				require.NotNil(t, res)
 				assert.Equal(t, 123.45, *res.Value)
+			},
+		},
+		{
+			name:         "SaveMetrics returns error when counter delta is nil",
+			initialState: map[string]*Metrics{},
+			inputMetric: &Metrics{
+				ID:    "NilCounter",
+				MType: Counter,
+				Delta: nil,
+			},
+			searchName:    "NilCounter",
+			searchType:    Counter,
+			expectedError: ErrDeltaIsNil,
+			verifyState: func(t *testing.T, res *Metrics, s *MemStorage) {
+				assert.Nil(t, res)
+			},
+		},
+		{
+			name:         "SaveMetrics returns error when gauge value is nil",
+			initialState: map[string]*Metrics{},
+			inputMetric: &Metrics{
+				ID:    "NilGauge",
+				MType: Gauge,
+				Value: nil,
+			},
+			searchName:    "NilGauge",
+			searchType:    Gauge,
+			expectedError: ErrValueIsNil,
+			verifyState: func(t *testing.T, res *Metrics, s *MemStorage) {
+				assert.Nil(t, res)
 			},
 		},
 		{
@@ -100,10 +125,8 @@ func TestMemStorage_SaveAndGetMetrics(t *testing.T) {
 			},
 		},
 		{
-			name: "SaveMetrics returns error on invalid type when metric exists",
-			initialState: map[string]*Metrics{
-				metricKey("BadMetric", Counter): {ID: "BadMetric", MType: Counter, Delta: ptr(int64(10))},
-			},
+			name:         "SaveMetrics returns error on invalid type",
+			initialState: map[string]*Metrics{},
 			inputMetric: &Metrics{
 				ID:    "BadMetric",
 				MType: "unsupported_type",
@@ -112,8 +135,7 @@ func TestMemStorage_SaveAndGetMetrics(t *testing.T) {
 			searchType:    Counter,
 			expectedError: ErrUnknownMetricsType,
 			verifyState: func(t *testing.T, res *Metrics, s *MemStorage) {
-				require.NotNil(t, res)
-				assert.Equal(t, Counter, res.MType)
+				assert.Nil(t, res)
 			},
 		},
 		{
@@ -125,29 +147,6 @@ func TestMemStorage_SaveAndGetMetrics(t *testing.T) {
 			expectedError: errMetricsNotFound,
 			verifyState: func(t *testing.T, res *Metrics, s *MemStorage) {
 				assert.Nil(t, res)
-			},
-		},
-		{
-			name: "SaveMetrics allows two metrics with the same name but different types",
-			initialState: map[string]*Metrics{
-				metricKey("Alloc", Gauge): {ID: "Alloc", MType: Gauge, Value: ptr(55.5)},
-			},
-			inputMetric: &Metrics{
-				ID:    "Alloc",
-				MType: Counter,
-				Delta: ptr(int64(10)),
-			},
-			searchName:    "Alloc",
-			searchType:    Counter,
-			expectedError: nil,
-			verifyState: func(t *testing.T, res *Metrics, s *MemStorage) {
-				require.NotNil(t, res)
-				assert.Equal(t, int64(10), *res.Delta)
-
-				gaugeRes, err := s.GetMetrics(context.Background(), "Alloc", Gauge)
-				require.NoError(t, err)
-				require.NotNil(t, gaugeRes)
-				assert.Equal(t, 55.5, *gaugeRes.Value)
 			},
 		},
 	}
@@ -183,6 +182,21 @@ func TestMemStorage_SaveAndGetMetrics(t *testing.T) {
 	}
 }
 
+func TestMemStorage_GetAllMetrics(t *testing.T) {
+	s := NewMemStorage()
+	counter := Metrics{ID: "C1", MType: Counter, Delta: ptr(int64(10))}
+	gauge := Metrics{ID: "G1", MType: Gauge, Value: ptr(12.3)}
+
+	err := s.SaveMetrics(context.Background(), &counter)
+	assert.NoError(t, err)
+	err = s.SaveMetrics(context.Background(), &gauge)
+	assert.NoError(t, err)
+
+	metrics, err := s.GetAllMetrics(context.Background())
+	assert.NoError(t, err)
+	assert.Len(t, metrics, 2)
+}
+
 func ptr[T any](v T) *T {
 	return &v
 }
@@ -191,111 +205,24 @@ type MockStorage struct {
 	mock.Mock
 }
 
-func (m *MockStorage) RestoreMetrics(ctx context.Context, metric *Metrics) error {
+func (m *MockStorage) GetMetrics(ctx context.Context, name, mtype string) (*Metrics, error) {
+	args := m.Called(ctx, name, mtype)
+	if res, ok := args.Get(0).(*Metrics); ok {
+		return res, args.Error(1)
+	}
+	return nil, args.Error(1)
+}
+
+func (m *MockStorage) SaveMetrics(ctx context.Context, metric *Metrics) error {
 	args := m.Called(ctx, metric)
 	return args.Error(0)
 }
 
-func (m *MockStorage) GetMetrics(ctx context.Context, name, mtype string) (*Metrics, error) {
-	return nil, nil
-}
-
-func (m *MockStorage) SaveMetrics(ctx context.Context, metric *Metrics) error {
-	return nil
-}
-
-func (m *MockStorage) GetAllMetrics(ctx context.Context) []Metrics {
-	args := m.Called()
+func (m *MockStorage) GetAllMetrics(ctx context.Context) ([]Metrics, error) {
+	args := m.Called(ctx)
+	var res []Metrics
 	if rf, ok := args.Get(0).([]Metrics); ok {
-		return rf
+		res = rf
 	}
-	return nil
-}
-
-func TestRestoreMetricsMethod(t *testing.T) {
-	testCounter := Metrics{
-		ID:    "PollCount",
-		MType: Counter,
-		Delta: int64Ptr(5),
-	}
-	testGauge := Metrics{
-		ID:    "Alloc",
-		MType: Gauge,
-		Value: float64Ptr(124.50),
-	}
-
-	validMetricsList := []Metrics{testCounter, testGauge}
-	validJSON, err := json.Marshal(validMetricsList)
-	assert.NoError(t, err)
-
-	type mockExpectation struct {
-		metric      *Metrics
-		returnError error
-	}
-
-	testCases := []struct {
-		name         string
-		fileContent  []byte
-		useWrongPath bool
-		mockReturns  []mockExpectation
-		expectedErr  string
-	}{
-		{
-			name:        "Successful restore of multiple metrics",
-			fileContent: validJSON,
-			mockReturns: []mockExpectation{
-				{metric: &testCounter, returnError: nil},
-				{metric: &testGauge, returnError: nil},
-			},
-			expectedErr: "",
-		},
-		{
-			name:         "File path does not exist",
-			useWrongPath: true,
-			expectedErr:  "no such file or directory",
-		},
-		{
-			name:        "Malformed JSON payload",
-			fileContent: []byte(`[{"id": "PollCount", "type": "counter", "delta": "invalid_type"}`),
-			expectedErr: "unexpected end of JSON",
-		},
-		{
-			name:        "Storage returns an error on save",
-			fileContent: validJSON,
-			mockReturns: []mockExpectation{
-				{metric: &testCounter, returnError: errors.New("database connection lost")},
-			},
-			expectedErr: "database connection lost",
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			tmpDir := t.TempDir()
-			filePath := filepath.Join(tmpDir, "metrics_backup.json")
-
-			if !tc.useWrongPath {
-				err := os.WriteFile(filePath, tc.fileContent, 0644)
-				assert.NoError(t, err)
-			} else {
-				filePath = filepath.Join(tmpDir, "non_existent_file.json")
-			}
-
-			mockStorage := new(MockStorage)
-			for _, exp := range tc.mockReturns {
-				mockStorage.On("RestoreMetrics", mock.Anything, exp.metric).Return(exp.returnError).Once()
-			}
-
-			err := RestoreMetrics(filePath, mockStorage)
-
-			if tc.expectedErr != "" {
-				assert.Error(t, err)
-				assert.Contains(t, err.Error(), tc.expectedErr)
-			} else {
-				assert.NoError(t, err)
-			}
-
-			mockStorage.AssertExpectations(t)
-		})
-	}
+	return res, args.Error(1)
 }

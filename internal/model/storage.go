@@ -5,6 +5,5 @@ import "context"
 type Storage interface {
 	GetMetrics(context.Context, string, string) (*Metrics, error)
 	SaveMetrics(context.Context, *Metrics) error
-	RestoreMetrics(context.Context, *Metrics) error
-	GetAllMetrics(context.Context) []Metrics
+	GetAllMetrics(context.Context) ([]Metrics, error)
 }

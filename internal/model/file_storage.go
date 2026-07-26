@@ -27,12 +27,15 @@ func NewFileStorage(path string) (*FileStorage, error) {
 }
 
 func (fs *FileStorage) Load(storage Storage) error {
-	return RestoreMetrics(fs.path, storage)
+	return SaveMetrics(fs.path, storage)
 }
 
 func (fs *FileStorage) Save(storage Storage) error {
 	// extract metrics from storage
-	metrics := storage.GetAllMetrics(context.Background())
+	metrics, err := storage.GetAllMetrics(context.Background())
+	if err != nil {
+		return err
+	}
 
 	// encode to JSON
 	encodedMetrics, err := json.Marshal(metrics)

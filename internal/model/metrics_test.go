@@ -142,7 +142,7 @@ func TestCreateMetricsNegative(t *testing.T) {
 	}
 }
 
-func TestRestoreMetrics(t *testing.T) {
+func TestSaveMetrics(t *testing.T) {
 	testCounter := Metrics{
 		ID:    "PollCount",
 		MType: Counter,
@@ -159,7 +159,7 @@ func TestRestoreMetrics(t *testing.T) {
 	assert.NoError(t, err)
 
 	type mockExpectation struct {
-		metric      *Metrics
+		metricID    string
 		returnError error
 	}
 
@@ -171,11 +171,11 @@ func TestRestoreMetrics(t *testing.T) {
 		expectedErr  string
 	}{
 		{
-			name:        "Successful restore of multiple metrics",
+			name:        "Successful saving of multiple metrics to storage",
 			fileContent: validJSON,
 			mockReturns: []mockExpectation{
-				{metric: &testCounter, returnError: nil},
-				{metric: &testGauge, returnError: nil},
+				{metricID: "PollCount", returnError: nil},
+				{metricID: "Alloc", returnError: nil},
 			},
 			expectedErr: "",
 		},
@@ -193,7 +193,7 @@ func TestRestoreMetrics(t *testing.T) {
 			name:        "Storage returns an error on save",
 			fileContent: validJSON,
 			mockReturns: []mockExpectation{
-				{metric: &testCounter, returnError: errors.New("database connection lost")},
+				{metricID: "PollCount", returnError: errors.New("database connection lost")},
 			},
 			expectedErr: "database connection lost",
 		},
@@ -213,10 +213,16 @@ func TestRestoreMetrics(t *testing.T) {
 
 			mockStorage := new(MockStorage)
 			for _, exp := range tc.mockReturns {
-				mockStorage.On("RestoreMetrics", mock.Anything, exp.metric).Return(exp.returnError).Once()
+				expectedID := exp.metricID
+				mockStorage.On("SaveMetrics",
+					mock.Anything,
+					mock.MatchedBy(func(m *Metrics) bool {
+						return m != nil && m.ID == expectedID
+					}),
+				).Return(exp.returnError).Once()
 			}
 
-			err := RestoreMetrics(filePath, mockStorage)
+			err := SaveMetrics(filePath, mockStorage)
 
 			if tc.expectedErr != "" {
 				assert.Error(t, err)

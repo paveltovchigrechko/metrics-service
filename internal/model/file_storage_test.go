@@ -2,6 +2,7 @@ package model
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -64,8 +65,10 @@ func TestFileStorage_Load(t *testing.T) {
 		assert.NoError(t, err)
 
 		mockStorage := new(MockStorage)
-		// Match any context.Context passed as the first parameter
-		mockStorage.On("RestoreMetrics", mock.Anything, &testCounter).Return(nil).Once()
+		// Match metric by ID and value to avoid pointer reference inequality
+		mockStorage.On("SaveMetrics", mock.Anything, mock.MatchedBy(func(m *Metrics) bool {
+			return m != nil && m.ID == "LoadCount" && m.Delta != nil && *m.Delta == 42
+		})).Return(nil).Once()
 
 		fs, err := NewFileStorage(filePath)
 		assert.NoError(t, err)
@@ -91,6 +94,28 @@ func TestFileStorage_Load(t *testing.T) {
 		assert.Contains(t, err.Error(), "no such file or directory")
 		mockStorage.AssertExpectations(t)
 	})
+
+	t.Run("Failed load due to storage error during save", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		filePath := filepath.Join(tmpDir, "backup.json")
+
+		err := os.WriteFile(filePath, validJSON, 0644)
+		assert.NoError(t, err)
+
+		mockStorage := new(MockStorage)
+		mockStorage.On("SaveMetrics", mock.Anything, mock.MatchedBy(func(m *Metrics) bool {
+			return m != nil && m.ID == "LoadCount"
+		})).Return(errors.New("db write error")).Once()
+
+		fs, err := NewFileStorage(filePath)
+		assert.NoError(t, err)
+
+		err = fs.Load(mockStorage)
+
+		assert.Error(t, err)
+		assert.Equal(t, "db write error", err.Error())
+		mockStorage.AssertExpectations(t)
+	})
 }
 
 func TestFileStorage_Save(t *testing.T) {
@@ -112,8 +137,7 @@ func TestFileStorage_Save(t *testing.T) {
 		filePath := filepath.Join(tmpDir, "save.json")
 
 		mockStorage := new(MockStorage)
-		// Match any context.Context passed as the first parameter
-		mockStorage.On("GetAllMetrics", mock.Anything).Return(testMetrics).Once()
+		mockStorage.On("GetAllMetrics", mock.Anything).Return(testMetrics, nil).Once()
 
 		fs, err := NewFileStorage(filePath)
 		assert.NoError(t, err)
@@ -138,11 +162,29 @@ func TestFileStorage_Save(t *testing.T) {
 		mockStorage.AssertExpectations(t)
 	})
 
+	t.Run("Failed save due to storage error fetching metrics", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		filePath := filepath.Join(tmpDir, "save.json")
+
+		mockStorage := new(MockStorage)
+		mockStorage.On("GetAllMetrics", mock.Anything).
+			Return(nil, errors.New("storage failure")).Once()
+
+		fs, err := NewFileStorage(filePath)
+		assert.NoError(t, err)
+
+		err = fs.Save(mockStorage)
+
+		assert.Error(t, err)
+		assert.Equal(t, "storage failure", err.Error())
+		mockStorage.AssertExpectations(t)
+	})
+
 	t.Run("Failed save due to invalid directory path permissions", func(t *testing.T) {
 		invalidPath := "/invalid_directory_abc123/backup.json"
 
 		mockStorage := new(MockStorage)
-		mockStorage.On("GetAllMetrics", mock.Anything).Return(testMetrics).Once()
+		mockStorage.On("GetAllMetrics", mock.Anything).Return(testMetrics, nil).Once()
 
 		fs, err := NewFileStorage(invalidPath)
 		assert.NoError(t, err)

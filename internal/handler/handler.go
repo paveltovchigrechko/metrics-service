@@ -85,12 +85,18 @@ func (h *AppHandler) MainPage(w http.ResponseWriter, req *http.Request) {
 	t, err := template.New("mainpage").Funcs(templateFuncs).Parse(mainPageTpl)
 	if err != nil {
 		WriteError(w, err, http.StatusInternalServerError)
+		return
 	}
 
-	metrics := h.storage.GetAllMetrics(req.Context())
+	metrics, err := h.storage.GetAllMetrics(req.Context())
+	if err != nil {
+		WriteError(w, err, http.StatusInternalServerError)
+		return
+	}
 
 	if err := t.Execute(w, metrics); err != nil {
 		WriteError(w, err, http.StatusInternalServerError)
+		return
 	}
 }
 

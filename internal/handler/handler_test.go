@@ -25,11 +25,11 @@ func ptr[T any](v T) *T {
 }
 
 // MockStorage implements models.Storage explicitly with context.Context as first argument.
+// MockStorage implements models.Storage explicitly with context.Context as first argument.
 type MockStorage struct {
-	OnGetMetrics     func(context.Context, string, string) (*models.Metrics, error)
-	OnSaveMetrics    func(context.Context, *models.Metrics) error
-	OnRestoreMetrics func(context.Context, *models.Metrics) error
-	OnGetAllMetrics  func(context.Context) []models.Metrics
+	OnGetMetrics    func(context.Context, string, string) (*models.Metrics, error)
+	OnSaveMetrics   func(context.Context, *models.Metrics) error
+	OnGetAllMetrics func(context.Context) ([]models.Metrics, error)
 }
 
 func (m *MockStorage) GetMetrics(ctx context.Context, name, mtype string) (*models.Metrics, error) {
@@ -46,18 +46,11 @@ func (m *MockStorage) SaveMetrics(ctx context.Context, mt *models.Metrics) error
 	return nil
 }
 
-func (m *MockStorage) RestoreMetrics(ctx context.Context, mt *models.Metrics) error {
-	if m.OnRestoreMetrics != nil {
-		return m.OnRestoreMetrics(ctx, mt)
-	}
-	return nil
-}
-
-func (m *MockStorage) GetAllMetrics(ctx context.Context) []models.Metrics {
+func (m *MockStorage) GetAllMetrics(ctx context.Context) ([]models.Metrics, error) {
 	if m.OnGetAllMetrics != nil {
 		return m.OnGetAllMetrics(ctx)
 	}
-	return nil
+	return nil, nil
 }
 
 func newRequestWithChiParams(method, target string, params map[string]string) *http.Request {
@@ -193,7 +186,7 @@ func TestPostMetrics(t *testing.T) {
 func TestMainPage(t *testing.T) {
 	t.Run("successfully renders html list", func(t *testing.T) {
 		mockStorage := &MockStorage{
-			OnGetAllMetrics: func(ctx context.Context) []models.Metrics {
+			OnGetAllMetrics: func(ctx context.Context) ([]models.Metrics, error) {
 				return []models.Metrics{
 					{
 						ID:    "Alloc",
@@ -205,7 +198,7 @@ func TestMainPage(t *testing.T) {
 						MType: models.Counter,
 						Delta: ptr(int64(5)),
 					},
-				}
+				}, nil
 			},
 		}
 		h := NewHandler(mockStorage, nil, nil)
@@ -230,8 +223,8 @@ func TestMainPage(t *testing.T) {
 
 	t.Run("renders empty state message when no metrics exist", func(t *testing.T) {
 		mockStorage := &MockStorage{
-			OnGetAllMetrics: func(ctx context.Context) []models.Metrics {
-				return []models.Metrics{}
+			OnGetAllMetrics: func(ctx context.Context) ([]models.Metrics, error) {
+				return []models.Metrics{}, nil
 			},
 		}
 		h := NewHandler(mockStorage, nil, nil)
