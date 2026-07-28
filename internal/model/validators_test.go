@@ -1,0 +1,153 @@
+package model
+
+import (
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+)
+
+func TestValidateName(t *testing.T) {
+	tests := []struct {
+		name          string
+		input         string
+		expectedError error
+	}{
+		{
+			name:          "Valid name",
+			input:         "Alloc",
+			expectedError: nil,
+		},
+		{
+			name:          "Empty name",
+			input:         "",
+			expectedError: ErrEmptyMetricsID,
+		},
+		{
+			name:          "Whitespace-only name",
+			input:         "   ",
+			expectedError: ErrEmptyMetricsID,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			err := validateName(tc.input)
+			assert.ErrorIs(t, err, tc.expectedError)
+		})
+	}
+}
+
+func TestValidateType(t *testing.T) {
+	tests := []struct {
+		name          string
+		input         string
+		expectedError error
+	}{
+		{
+			name:          "Valid Counter type",
+			input:         Counter,
+			expectedError: nil,
+		},
+		{
+			name:          "Valid Gauge type",
+			input:         Gauge,
+			expectedError: nil,
+		},
+		{
+			name:          "Unknown metric type",
+			input:         "histogram",
+			expectedError: ErrUnknownMetricsType,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			err := validateType(tc.input)
+			assert.ErrorIs(t, err, tc.expectedError)
+		})
+	}
+}
+
+func TestValidateMetrics(t *testing.T) {
+	tests := []struct {
+		name          string
+		metric        *Metrics
+		expectedError error
+	}{
+		{
+			name:          "Nil metric pointer",
+			metric:        nil,
+			expectedError: errMetricsIsNil,
+		},
+		{
+			name: "Empty metric ID",
+			metric: &Metrics{
+				ID:    "",
+				MType: Counter,
+				Delta: ptr(int64(10)),
+			},
+			expectedError: ErrEmptyMetricsID,
+		},
+		{
+			name: "Unknown metric type",
+			metric: &Metrics{
+				ID:    "CpuUsage",
+				MType: "invalid_type",
+			},
+			expectedError: ErrUnknownMetricsType,
+		},
+		{
+			name: "Both Delta and Value present",
+			metric: &Metrics{
+				ID:    "InvalidMetric",
+				MType: Counter,
+				Delta: ptr(int64(10)),
+				Value: ptr(5.5),
+			},
+			expectedError: errDeltaAndValuePresent,
+		},
+		{
+			name: "Counter with nil Delta",
+			metric: &Metrics{
+				ID:    "PollCount",
+				MType: Counter,
+				Delta: nil,
+			},
+			expectedError: ErrDeltaIsNil,
+		},
+		{
+			name: "Valid Counter metric",
+			metric: &Metrics{
+				ID:    "PollCount",
+				MType: Counter,
+				Delta: ptr(int64(1)),
+			},
+			expectedError: nil,
+		},
+		{
+			name: "Gauge with nil Value",
+			metric: &Metrics{
+				ID:    "Alloc",
+				MType: Gauge,
+				Value: nil,
+			},
+			expectedError: ErrValueIsNil,
+		},
+		{
+			name: "Valid Gauge metric",
+			metric: &Metrics{
+				ID:    "Alloc",
+				MType: Gauge,
+				Value: ptr(100.5),
+			},
+			expectedError: nil,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			err := validateMetrics(tc.metric)
+			assert.ErrorIs(t, err, tc.expectedError)
+		})
+	}
+}

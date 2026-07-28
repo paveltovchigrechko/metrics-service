@@ -226,3 +226,55 @@ func (m *MockStorage) GetAllMetrics(ctx context.Context) ([]Metrics, error) {
 	}
 	return res, args.Error(1)
 }
+
+func (m *MockStorage) SaveBatch(ctx context.Context, metrics []Metrics) error {
+	args := m.Called(ctx, metrics)
+
+	return args.Error(0)
+}
+
+func TestMemStorage_SaveBatch(t *testing.T) {
+	t.Run("Successfully saves a batch of mixed valid metrics", func(t *testing.T) {
+		s := NewMemStorage()
+
+		batch := []Metrics{
+			{ID: "Requests", MType: Counter, Delta: ptr(int64(10))},
+			{ID: "Temperature", MType: Gauge, Value: ptr(36.6)},
+		}
+
+		err := s.SaveBatch(context.Background(), batch)
+		assert.NoError(t, err)
+
+		// Verify elements were successfully inserted
+		resCounter, err := s.GetMetrics(context.Background(), "Requests", Counter)
+		assert.NoError(t, err)
+		assert.Equal(t, int64(10), *resCounter.Delta)
+
+		resGauge, err := s.GetMetrics(context.Background(), "Temperature", Gauge)
+		assert.NoError(t, err)
+		assert.Equal(t, 36.6, *resGauge.Value)
+	})
+
+	t.Run("Batch fails validation and aborts completely", func(t *testing.T) {
+		s := NewMemStorage()
+
+		// Pre-populate an initial metric
+		initial := &Metrics{ID: "Requests", MType: Counter, Delta: ptr(int64(10))}
+		err := s.SaveMetrics(context.Background(), initial)
+		require.NoError(t, err)
+
+		// Batch contains a valid metric followed by an invalid one (nil delta for counter)
+		batch := []Metrics{
+			{ID: "Requests", MType: Counter, Delta: ptr(int64(5))}, // Would accumulate to 15 if applied
+			{ID: "BadCounter", MType: Counter, Delta: nil},         // Invalid
+		}
+
+		err = s.SaveBatch(context.Background(), batch)
+		assert.ErrorIs(t, err, ErrDeltaIsNil)
+
+		// Verify atomicity: because it failed, the first metric should NOT have been updated/accumulated
+		resCounter, err := s.GetMetrics(context.Background(), "Requests", Counter)
+		assert.NoError(t, err)
+		assert.Equal(t, int64(10), *resCounter.Delta, "Batch should not apply partial changes on failure")
+	})
+}
