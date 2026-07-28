@@ -31,7 +31,7 @@ func (ms *MemStorage) GetMetrics(ctx context.Context, name, mtype string) (*Metr
 	key := metricKey(name, mtype)
 	metrics, ok := ms.Metrics[key]
 	if !ok {
-		return nil, errMetricsNotFound
+		return nil, ErMetricsNotFound
 	}
 
 	return metrics, nil

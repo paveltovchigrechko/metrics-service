@@ -25,11 +25,11 @@ func ptr[T any](v T) *T {
 }
 
 // MockStorage implements models.Storage explicitly with context.Context as first argument.
-// MockStorage implements models.Storage explicitly with context.Context as first argument.
 type MockStorage struct {
 	OnGetMetrics    func(context.Context, string, string) (*models.Metrics, error)
 	OnSaveMetrics   func(context.Context, *models.Metrics) error
 	OnGetAllMetrics func(context.Context) ([]models.Metrics, error)
+	OnSaveBatch     func(context.Context, []models.Metrics) error
 }
 
 func (m *MockStorage) GetMetrics(ctx context.Context, name, mtype string) (*models.Metrics, error) {
@@ -51,6 +51,14 @@ func (m *MockStorage) GetAllMetrics(ctx context.Context) ([]models.Metrics, erro
 		return m.OnGetAllMetrics(ctx)
 	}
 	return nil, nil
+}
+
+func (m *MockStorage) SaveBatch(ctx context.Context, metrics []models.Metrics) error {
+	if m.OnSaveBatch != nil {
+		return m.OnSaveBatch(ctx, metrics)
+	}
+
+	return nil
 }
 
 func newRequestWithChiParams(method, target string, params map[string]string) *http.Request {
@@ -375,6 +383,82 @@ func TestUpdateEndpoint(t *testing.T) {
 
 			w := httptest.NewRecorder()
 			h.UpdateEndpoint(w, req)
+
+			assert.Equal(t, tt.wantStatus, w.Code)
+		})
+	}
+}
+
+func TestUpdatesEndpoint(t *testing.T) {
+	tests := []struct {
+		name         string
+		contentType  string
+		body         string
+		setupStorage func() models.Storage
+		updateErr    error
+		wantStatus   int
+	}{
+		{
+			name:        "successfully process batch updates",
+			contentType: "application/json",
+			body:        `[{"id":"PollCount","type":"counter","delta":10}]`,
+			setupStorage: func() models.Storage {
+				m := &MockStorage{}
+				m.OnSaveBatch = func(ctx context.Context, metrics []models.Metrics) error {
+					return nil
+				}
+				return m
+			},
+			wantStatus: http.StatusOK,
+		},
+		{
+			name:        "invalid content type returns bad request",
+			contentType: "text/plain",
+			body:        `[{"id":"PollCount","type":"counter","delta":10}]`,
+			setupStorage: func() models.Storage {
+				return &MockStorage{}
+			},
+			wantStatus: http.StatusBadRequest,
+		},
+		{
+			name:        "validation error from storage returns bad request",
+			contentType: "application/json",
+			body:        `[{"id":"BadCounter","type":"counter"}]`,
+			setupStorage: func() models.Storage {
+				m := &MockStorage{}
+				m.OnSaveBatch = func(ctx context.Context, metrics []models.Metrics) error {
+					return models.ErrDeltaIsNil
+				}
+				return m
+			},
+			wantStatus: http.StatusBadRequest,
+		},
+		{
+			name:        "storage internal error returns internal server error",
+			contentType: "application/json",
+			body:        `[{"id":"PollCount","type":"counter","delta":10}]`,
+			setupStorage: func() models.Storage {
+				m := &MockStorage{}
+				m.OnSaveBatch = func(ctx context.Context, metrics []models.Metrics) error {
+					return errors.New("database connection lost")
+				}
+				return m
+			},
+			wantStatus: http.StatusInternalServerError,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h := NewHandler(tt.setupStorage(), nil, nil)
+
+			req := httptest.NewRequest(http.MethodPost, "/updates", strings.NewReader(tt.body))
+			if tt.contentType != "" {
+				req.Header.Set("Content-Type", tt.contentType)
+			}
+
+			w := httptest.NewRecorder()
+			h.UpdatesEndpoint(w, req)
 
 			assert.Equal(t, tt.wantStatus, w.Code)
 		})
@@ -863,6 +947,54 @@ func TestDecodeJSONMetrics(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			req := httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString(tt.body))
 			res, err := decodeJSONMetrics(req)
+
+			if tt.expectErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				tt.verify(t, res)
+			}
+		})
+	}
+}
+
+func TestDecodeJSONBatch(t *testing.T) {
+	tests := []struct {
+		name      string
+		body      string
+		expectErr bool
+		verify    func(t *testing.T, metrics []models.Metrics)
+	}{
+		{
+			name:      "decode valid batch of metrics",
+			body:      `[{"id":"Alloc","type":"gauge","value":54.12},{"id":"PollCount","type":"counter","delta":5}]`,
+			expectErr: false,
+			verify: func(t *testing.T, metrics []models.Metrics) {
+				require.Len(t, metrics, 2)
+				assert.Equal(t, "Alloc", metrics[0].ID)
+				assert.Equal(t, models.Gauge, metrics[0].MType)
+				assert.Equal(t, 54.12, *metrics[0].Value)
+				assert.Equal(t, "PollCount", metrics[1].ID)
+				assert.Equal(t, models.Counter, metrics[1].MType)
+				assert.Equal(t, int64(5), *metrics[1].Delta)
+			},
+		},
+		{
+			name:      "reject batch with unknown fields due to strict decoding",
+			body:      `[{"id":"Alloc","type":"gauge","value":54.12,"extra":"field"}]`,
+			expectErr: true,
+		},
+		{
+			name:      "malformed json syntax error in batch",
+			body:      `[{"id":"Alloc",`,
+			expectErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString(tt.body))
+			res, err := decodeJSONBatch(req)
 
 			if tt.expectErr {
 				assert.Error(t, err)

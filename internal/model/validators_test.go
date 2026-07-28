@@ -77,7 +77,7 @@ func TestValidateMetrics(t *testing.T) {
 		{
 			name:          "Nil metric pointer",
 			metric:        nil,
-			expectedError: errMetricsIsNil,
+			expectedError: ErrMetricsIsNil,
 		},
 		{
 			name: "Empty metric ID",
@@ -104,7 +104,7 @@ func TestValidateMetrics(t *testing.T) {
 				Delta: ptr(int64(10)),
 				Value: ptr(5.5),
 			},
-			expectedError: errDeltaAndValuePresent,
+			expectedError: ErrDeltaAndValuePresent,
 		},
 		{
 			name: "Counter with nil Delta",

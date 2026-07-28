@@ -6,13 +6,13 @@ import (
 )
 
 var (
-	errMetricsNotFound      = errors.New("metrics not found")
+	ErMetricsNotFound       = errors.New("metrics not found")
 	ErrEmptyMetricsID       = errors.New("metrics id is empty")
 	ErrUnknownMetricsType   = errors.New("unknown metrics type")
 	ErrDeltaIsNil           = errors.New("counter metrics delta is nil")
 	ErrValueIsNil           = errors.New("gauge metrics value is nil")
-	errDeltaAndValuePresent = errors.New("metrics has both detla and value fields")
-	errMetricsIsNil         = errors.New("metrics is nil")
+	ErrDeltaAndValuePresent = errors.New("metrics has both detla and value fields")
+	ErrMetricsIsNil         = errors.New("metrics is nil")
 )
 
 func validateName(name string) error {
@@ -33,7 +33,7 @@ func validateType(mtype string) error {
 
 func validateMetrics(m *Metrics) error {
 	if m == nil {
-		return errMetricsIsNil
+		return ErrMetricsIsNil
 	}
 	if err := validateName(m.ID); err != nil {
 		return err
@@ -44,7 +44,7 @@ func validateMetrics(m *Metrics) error {
 	}
 
 	if m.Delta != nil && m.Value != nil {
-		return errDeltaAndValuePresent
+		return ErrDeltaAndValuePresent
 	}
 
 	switch m.MType {

@@ -144,7 +144,7 @@ func TestMemStorage_SaveAndGetMetrics(t *testing.T) {
 			inputMetric:   nil,
 			searchName:    "MissingMetric",
 			searchType:    Counter,
-			expectedError: errMetricsNotFound,
+			expectedError: ErMetricsNotFound,
 			verifyState: func(t *testing.T, res *Metrics, s *MemStorage) {
 				assert.Nil(t, res)
 			},
@@ -161,7 +161,7 @@ func TestMemStorage_SaveAndGetMetrics(t *testing.T) {
 			var saveErr error
 			if tc.inputMetric != nil {
 				saveErr = s.SaveMetrics(context.Background(), tc.inputMetric)
-				if tc.expectedError != nil && tc.expectedError != errMetricsNotFound {
+				if tc.expectedError != nil && tc.expectedError != ErMetricsNotFound {
 					assert.ErrorIs(t, saveErr, tc.expectedError)
 				} else {
 					assert.NoError(t, saveErr)
@@ -169,7 +169,7 @@ func TestMemStorage_SaveAndGetMetrics(t *testing.T) {
 			}
 
 			res, getErr := s.GetMetrics(context.Background(), tc.searchName, tc.searchType)
-			if tc.expectedError != nil && tc.expectedError == errMetricsNotFound {
+			if tc.expectedError != nil && tc.expectedError == ErMetricsNotFound {
 				assert.ErrorIs(t, getErr, tc.expectedError)
 			} else {
 				if saveErr == nil {

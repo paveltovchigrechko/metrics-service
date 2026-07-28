@@ -9,6 +9,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 )
 
 func TestNewFileStorage(t *testing.T) {
@@ -48,30 +49,24 @@ func TestNewFileStorage(t *testing.T) {
 }
 
 func TestFileStorage_Load(t *testing.T) {
-	testCounter := Metrics{
-		ID:    "LoadCount",
-		MType: Counter,
-		Delta: int64Ptr(42),
-	}
-	validMetricsList := []Metrics{testCounter}
-	validJSON, err := json.Marshal(validMetricsList)
-	assert.NoError(t, err)
-
 	t.Run("Successfully load metrics from file", func(t *testing.T) {
-		tmpDir := t.TempDir()
-		filePath := filepath.Join(tmpDir, "backup.json")
+		tmpFile, err := os.CreateTemp("", "metrics_test_*.json")
+		require.NoError(t, err)
+		defer os.Remove(tmpFile.Name())
 
-		err := os.WriteFile(filePath, validJSON, 0644)
-		assert.NoError(t, err)
+		jsonData := `[{"id":"LoadCount","type":"counter","delta":10}]`
+		_, err = tmpFile.WriteString(jsonData)
+		require.NoError(t, err)
+		require.NoError(t, tmpFile.Close())
+
+		fs, err := NewFileStorage(tmpFile.Name())
+		require.NoError(t, err)
 
 		mockStorage := new(MockStorage)
-		// Match metric by ID and value to avoid pointer reference inequality
-		mockStorage.On("SaveMetrics", mock.Anything, mock.MatchedBy(func(m *Metrics) bool {
-			return m != nil && m.ID == "LoadCount" && m.Delta != nil && *m.Delta == 42
-		})).Return(nil).Once()
 
-		fs, err := NewFileStorage(filePath)
-		assert.NoError(t, err)
+		mockStorage.On("SaveBatch", mock.Anything, mock.MatchedBy(func(metrics []Metrics) bool {
+			return len(metrics) == 1 && metrics[0].ID == "LoadCount" && metrics[0].Delta != nil && *metrics[0].Delta == 10
+		})).Return(nil)
 
 		err = fs.Load(mockStorage)
 
@@ -96,24 +91,27 @@ func TestFileStorage_Load(t *testing.T) {
 	})
 
 	t.Run("Failed load due to storage error during save", func(t *testing.T) {
-		tmpDir := t.TempDir()
-		filePath := filepath.Join(tmpDir, "backup.json")
+		// Create temporary file with valid metrics JSON
+		tmpFile, err := os.CreateTemp("", "metrics_test_*.json")
+		require.NoError(t, err)
+		defer os.Remove(tmpFile.Name())
 
-		err := os.WriteFile(filePath, validJSON, 0644)
-		assert.NoError(t, err)
+		jsonData := `[{"id":"LoadCount","type":"counter","delta":10}]`
+		_, err = tmpFile.WriteString(jsonData)
+		require.NoError(t, err)
+		require.NoError(t, tmpFile.Close())
 
+		fs, err := NewFileStorage(tmpFile.Name())
+		require.NoError(t, err)
 		mockStorage := new(MockStorage)
-		mockStorage.On("SaveMetrics", mock.Anything, mock.MatchedBy(func(m *Metrics) bool {
-			return m != nil && m.ID == "LoadCount"
-		})).Return(errors.New("db write error")).Once()
 
-		fs, err := NewFileStorage(filePath)
-		assert.NoError(t, err)
+		// Configure mock to return an error when SaveBatch is invoked
+		mockStorage.On("SaveBatch", mock.Anything, mock.Anything).Return(errors.New("storage error"))
 
 		err = fs.Load(mockStorage)
 
 		assert.Error(t, err)
-		assert.Equal(t, "db write error", err.Error())
+		assert.Contains(t, err.Error(), "storage error")
 		mockStorage.AssertExpectations(t)
 	})
 }

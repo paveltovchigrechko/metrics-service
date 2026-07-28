@@ -32,7 +32,7 @@ func (ps *PostgresStorage) GetMetrics(ctx context.Context, name string, mType st
 
 	err := row.Scan(&m.ID, &m.MType, &delta, &value)
 	if errors.Is(err, sql.ErrNoRows) {
-		return nil, errMetricsNotFound
+		return nil, ErMetricsNotFound
 	} else if err != nil {
 		return nil, err
 	}

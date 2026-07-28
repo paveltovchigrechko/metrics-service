@@ -157,6 +157,46 @@ func (h *AppHandler) UpdateEndpoint(w http.ResponseWriter, req *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
+func (h *AppHandler) UpdatesEndpoint(w http.ResponseWriter, req *http.Request) {
+	if err := validateReqContentType(req, applicationJSON); err != nil {
+		WriteError(w, err, http.StatusBadRequest)
+		return
+	}
+
+	parsedMetrics, err := decodeJSONBatch(req)
+	if err != nil {
+		WriteError(w, err, http.StatusBadRequest)
+		return
+	}
+
+	if len(parsedMetrics) == 0 {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	err = h.storage.SaveBatch(req.Context(), parsedMetrics)
+	if err != nil {
+		if errors.Is(err, models.ErrDeltaIsNil) ||
+			errors.Is(err, models.ErrEmptyMetricsID) ||
+			errors.Is(err, models.ErrUnknownMetricsType) ||
+			errors.Is(err, models.ErrValueIsNil) ||
+			errors.Is(err, models.ErrDeltaAndValuePresent) {
+			WriteError(w, err, http.StatusBadRequest)
+			return
+		}
+		WriteError(w, err, http.StatusInternalServerError)
+		return
+	}
+
+	if h.afterSuccessfulUpdate != nil {
+		if err := h.afterSuccessfulUpdate(); err != nil {
+			WriteError(w, err, http.StatusInternalServerError)
+			return
+		}
+	}
+	w.WriteHeader(http.StatusOK)
+}
+
 func (h *AppHandler) ValueEndpoint(w http.ResponseWriter, req *http.Request) {
 	if err := validateReqContentType(req, applicationJSON); err != nil {
 		WriteError(w, err, http.StatusBadRequest)
@@ -304,6 +344,18 @@ func decodeJSONMetrics(req *http.Request) (*common.Metrics, error) {
 	}
 
 	return &jsonMetrics, nil
+}
+
+func decodeJSONBatch(req *http.Request) ([]models.Metrics, error) {
+	metrics := make([]models.Metrics, 0)
+	decoder := json.NewDecoder(req.Body)
+	decoder.DisallowUnknownFields()
+
+	if err := decoder.Decode(&metrics); err != nil { // Trailing JSON issue as ([{"id":"A"}] {"unexpected":"second document"}): how should we treat it?
+		return nil, err
+	}
+
+	return metrics, nil
 }
 
 func WriteError(w http.ResponseWriter, err error, status int) {

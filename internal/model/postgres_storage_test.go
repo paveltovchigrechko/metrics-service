@@ -77,7 +77,7 @@ func TestPostgresStorage_GetMetrics(t *testing.T) {
 		m, err := s.GetMetrics(context.Background(), "Missing", Gauge)
 
 		assert.Nil(t, m)
-		assert.ErrorIs(t, err, errMetricsNotFound)
+		assert.ErrorIs(t, err, ErMetricsNotFound)
 		assert.NoError(t, mock.ExpectationsWereMet())
 	})
 
@@ -167,7 +167,7 @@ func TestPostgresStorage_SaveMetrics(t *testing.T) {
 		assert.ErrorIs(t, err, ErrEmptyMetricsID)
 
 		err = s.SaveMetrics(context.Background(), nil)
-		assert.ErrorIs(t, err, errMetricsIsNil)
+		assert.ErrorIs(t, err, ErrMetricsIsNil)
 	})
 
 	t.Run("returns error when database exec fails", func(t *testing.T) {

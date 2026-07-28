@@ -1,14 +1,9 @@
 package model
 
 import (
-	"encoding/json"
-	"errors"
-	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
 )
 
 func int64Ptr(v int64) *int64       { return &v }
@@ -138,100 +133,6 @@ func TestCreateMetricsNegative(t *testing.T) {
 
 			assert.Nil(t, result)
 			assert.ErrorIs(t, err, tc.expectedErr)
-		})
-	}
-}
-
-func TestSaveMetrics(t *testing.T) {
-	testCounter := Metrics{
-		ID:    "PollCount",
-		MType: Counter,
-		Delta: int64Ptr(5),
-	}
-	testGauge := Metrics{
-		ID:    "Alloc",
-		MType: Gauge,
-		Value: float64Ptr(124.50),
-	}
-
-	validMetricsList := []Metrics{testCounter, testGauge}
-	validJSON, err := json.Marshal(validMetricsList)
-	assert.NoError(t, err)
-
-	type mockExpectation struct {
-		metricID    string
-		returnError error
-	}
-
-	testCases := []struct {
-		name         string
-		fileContent  []byte
-		useWrongPath bool
-		mockReturns  []mockExpectation
-		expectedErr  string
-	}{
-		{
-			name:        "Successful saving of multiple metrics to storage",
-			fileContent: validJSON,
-			mockReturns: []mockExpectation{
-				{metricID: "PollCount", returnError: nil},
-				{metricID: "Alloc", returnError: nil},
-			},
-			expectedErr: "",
-		},
-		{
-			name:         "File path does not exist",
-			useWrongPath: true,
-			expectedErr:  "no such file or directory",
-		},
-		{
-			name:        "Malformed or corrupt JSON payload",
-			fileContent: []byte(`[{"id": "PollCount", "type": "counter", "delta": "invalid_type"`),
-			expectedErr: "unexpected end of JSON",
-		},
-		{
-			name:        "Storage returns an error on save",
-			fileContent: validJSON,
-			mockReturns: []mockExpectation{
-				{metricID: "PollCount", returnError: errors.New("database connection lost")},
-			},
-			expectedErr: "database connection lost",
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			tmpDir := t.TempDir()
-			filePath := filepath.Join(tmpDir, "metrics_backup.json")
-
-			if !tc.useWrongPath {
-				err := os.WriteFile(filePath, tc.fileContent, 0644)
-				assert.NoError(t, err)
-			} else {
-				filePath = filepath.Join(tmpDir, "non_existent_file.json")
-			}
-
-			mockStorage := new(MockStorage)
-			for _, exp := range tc.mockReturns {
-				expectedID := exp.metricID
-				mockStorage.On("SaveMetrics",
-					mock.Anything,
-					mock.MatchedBy(func(m *Metrics) bool {
-						return m != nil && m.ID == expectedID
-					}),
-				).Return(exp.returnError).Once()
-			}
-
-			err := SaveMetrics(filePath, mockStorage)
-
-			if tc.expectedErr != "" {
-				assert.Error(t, err)
-				assert.Contains(t, err.Error(), tc.expectedErr)
-			} else {
-				assert.NoError(t, err)
-			}
-
-			mockStorage.AssertExpectations(t)
 		})
 	}
 }

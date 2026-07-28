@@ -27,7 +27,22 @@ func NewFileStorage(path string) (*FileStorage, error) {
 }
 
 func (fs *FileStorage) Load(storage Storage) error {
-	return SaveMetrics(fs.path, storage)
+	bytes, err := os.ReadFile(fs.path)
+	if err != nil {
+		return err
+	}
+
+	metrics := make([]Metrics, 0)
+	err = json.Unmarshal(bytes, &metrics)
+	if err != nil {
+		return err
+	}
+
+	if err = storage.SaveBatch(context.Background(), metrics); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (fs *FileStorage) Save(storage Storage) error {

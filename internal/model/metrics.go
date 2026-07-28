@@ -1,11 +1,5 @@
 package model
 
-import (
-	"context"
-	"encoding/json"
-	"os"
-)
-
 const (
 	Counter = "counter"
 	Gauge   = "gauge"
@@ -43,26 +37,4 @@ func CreateMetrics(name, mtype string, delta int64, value float64) (*Metrics, er
 	}
 
 	return m, nil
-}
-
-func SaveMetrics(path string, storage Storage) error {
-	bytes, err := os.ReadFile(path)
-	if err != nil {
-		return err
-	}
-
-	metrics := make([]Metrics, 0)
-	err = json.Unmarshal(bytes, &metrics)
-	if err != nil {
-		return err
-	}
-
-	for i := range metrics {
-		err := storage.SaveMetrics(context.Background(), &metrics[i])
-		if err != nil {
-			return err // We may want to skip a malformed metrics and try to recover the next one.
-		}
-	}
-
-	return nil
 }
