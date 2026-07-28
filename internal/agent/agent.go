@@ -361,36 +361,38 @@ func (a *Agent) sendMetricsURL(metrics []*models.Metrics) error {
 }
 
 func (a *Agent) sendMetricsJSON(metrics []*models.Metrics, gzipCompressed bool) error {
-	url := fmt.Sprintf("http://%s/update", a.cfg.ServerAddress)
-	for _, m := range metrics {
-		body, err := json.Marshal(m) // use resty https://resty.dev/docs/content-type-encoder-and-decoder/#in-memory-marshal-and-unmarshal
+	if len(metrics) == 0 {
+		return nil
+	}
+
+	url := fmt.Sprintf("http://%s/updates", a.cfg.ServerAddress)
+	body, err := json.Marshal(metrics) // use resty https://resty.dev/docs/content-type-encoder-and-decoder/#in-memory-marshal-and-unmarshal
+	if err != nil {
+		return err
+	}
+
+	req := a.client.R().
+		SetHeader("Content-Type", applicationJSON)
+
+	if gzipCompressed {
+		body, err = gzipCompressJSON(body)
 		if err != nil {
 			return err
 		}
 
-		req := a.client.R().
-			SetHeader("Content-Type", applicationJSON)
+		req.SetHeader("Content-Encoding", gzipEncoding)
+	}
 
-		if gzipCompressed {
-			body, err = gzipCompressJSON(body)
-			if err != nil {
-				return err
-			}
+	resp, err := req.SetHeader("Content-Type", applicationJSON).
+		SetBody(body).
+		Post(url)
 
-			req.SetHeader("Content-Encoding", gzipEncoding)
-		}
+	if err != nil {
+		return err
+	}
 
-		resp, err := req.SetHeader("Content-Type", applicationJSON).
-			SetBody(body).
-			Post(url)
-
-		if err != nil {
-			return err
-		}
-
-		if resp.IsError() {
-			return fmt.Errorf("server returned status %s", resp.Status())
-		}
+	if resp.IsError() {
+		return fmt.Errorf("server returned status %s", resp.Status())
 	}
 
 	return nil
