@@ -128,6 +128,7 @@ func (s *Server) setHandlers() {
 	s.router.Post("/update/{metricsType}/{metricsName}/{metricsValue}", s.handler.PostMetrics)
 	s.router.Post("/update", s.handler.UpdateEndpoint)
 	s.router.Post("/update/", s.handler.UpdateEndpoint) // Keep for autotests
+	s.router.Post("/updates", s.handler.UpdatesEndpoint)
 	s.router.Post("/updates/", s.handler.UpdatesEndpoint)
 	s.router.Post("/value", s.handler.ValueEndpoint)
 	s.router.Post("/value/", s.handler.ValueEndpoint) // Keep for autotests
