@@ -3,11 +3,9 @@ package model
 import (
 	"testing"
 
+	"github.com/paveltovchigrechko/metrics-service/internal/common"
 	"github.com/stretchr/testify/assert"
 )
-
-func int64Ptr(v int64) *int64       { return &v }
-func float64Ptr(v float64) *float64 { return &v }
 
 func TestCreateMetricsPositive(t *testing.T) {
 	positiveTestCases := []struct {
@@ -27,7 +25,7 @@ func TestCreateMetricsPositive(t *testing.T) {
 			expected: &Metrics{
 				ID:    "Some Counter",
 				MType: Counter,
-				Delta: int64Ptr(99),
+				Delta: common.Int64Ptr(99),
 				Value: nil,
 			},
 		},
@@ -41,7 +39,7 @@ func TestCreateMetricsPositive(t *testing.T) {
 				ID:    "Some Gauge",
 				MType: Gauge,
 				Delta: nil,
-				Value: float64Ptr(88.77),
+				Value: common.Float64Ptr(88.77),
 			},
 		},
 		{
@@ -53,7 +51,7 @@ func TestCreateMetricsPositive(t *testing.T) {
 			expected: &Metrics{
 				ID:    "Zero Counter",
 				MType: Counter,
-				Delta: int64Ptr(0),
+				Delta: common.Int64Ptr(0),
 			},
 		},
 		{
@@ -65,7 +63,7 @@ func TestCreateMetricsPositive(t *testing.T) {
 			expected: &Metrics{
 				ID:    "Zero Gauge",
 				MType: Gauge,
-				Value: float64Ptr(0),
+				Value: common.Float64Ptr(0),
 			},
 		},
 	}

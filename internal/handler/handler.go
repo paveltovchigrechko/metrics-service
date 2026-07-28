@@ -13,6 +13,7 @@ import (
 	"github.com/paveltovchigrechko/metrics-service/internal/common"
 	"github.com/paveltovchigrechko/metrics-service/internal/logger"
 	models "github.com/paveltovchigrechko/metrics-service/internal/model"
+	"github.com/paveltovchigrechko/metrics-service/internal/repository"
 )
 
 const databasePingTimeout = 3 * time.Second
@@ -27,7 +28,7 @@ type Pinger interface {
 }
 
 type AppHandler struct {
-	storage models.Storage
+	storage repository.Storage
 	pinger  Pinger
 
 	// A callback for synchronous writing metrics to a FileStorage.
@@ -36,7 +37,7 @@ type AppHandler struct {
 	afterSuccessfulUpdate func() error
 }
 
-func NewHandler(s models.Storage, p Pinger, updateFunc func() error) *AppHandler {
+func NewHandler(s repository.Storage, p Pinger, updateFunc func() error) *AppHandler {
 	h := &AppHandler{
 		storage:               s,
 		pinger:                p,

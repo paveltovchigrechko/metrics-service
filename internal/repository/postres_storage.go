@@ -1,9 +1,11 @@
-package model
+package repository
 
 import (
 	"context"
 	"database/sql"
 	"errors"
+
+	"github.com/paveltovchigrechko/metrics-service/internal/model"
 )
 
 type PostgresStorage struct {
@@ -16,47 +18,47 @@ func NewPostgresStorage(db *sql.DB) *PostgresStorage {
 	}
 }
 
-func (ps *PostgresStorage) GetMetrics(ctx context.Context, name string, mType string) (*Metrics, error) {
-	if err := validateName(name); err != nil {
+func (ps *PostgresStorage) GetMetrics(ctx context.Context, name string, mType string) (*model.Metrics, error) {
+	if err := model.ValidateName(name); err != nil {
 		return nil, err
 	}
-	if err := validateType(mType); err != nil {
+	if err := model.ValidateType(mType); err != nil {
 		return nil, err
 	}
 
 	row := ps.database.QueryRowContext(ctx, "SELECT id, mtype, delta, value FROM metrics WHERE id = $1 AND mtype = $2", name, mType)
 
-	var m Metrics
+	var m model.Metrics
 	var delta sql.NullInt64
 	var value sql.NullFloat64
 
 	err := row.Scan(&m.ID, &m.MType, &delta, &value)
 	if errors.Is(err, sql.ErrNoRows) {
-		return nil, ErMetricsNotFound
+		return nil, model.ErrMetricsNotFound
 	} else if err != nil {
 		return nil, err
 	}
 
 	switch mType {
-	case Counter:
+	case model.Counter:
 		if delta.Valid {
 			m.Delta = &delta.Int64
 		} else {
-			return nil, ErrDeltaIsNil
+			return nil, model.ErrDeltaIsNil
 		}
-	case Gauge:
+	case model.Gauge:
 		if value.Valid {
 			m.Value = &value.Float64
 		} else {
-			return nil, ErrValueIsNil
+			return nil, model.ErrValueIsNil
 		}
 	}
 
 	return &m, nil
 }
 
-func (ps *PostgresStorage) SaveMetrics(ctx context.Context, m *Metrics) error {
-	if err := validateMetrics(m); err != nil {
+func (ps *PostgresStorage) SaveMetrics(ctx context.Context, m *model.Metrics) error {
+	if err := model.ValidateMetrics(m); err != nil {
 		return err
 	}
 
@@ -67,8 +69,8 @@ func (ps *PostgresStorage) SaveMetrics(ctx context.Context, m *Metrics) error {
 	return nil
 }
 
-func (ps *PostgresStorage) GetAllMetrics(ctx context.Context) ([]Metrics, error) {
-	metrics := make([]Metrics, 0) // Add some capacity here?
+func (ps *PostgresStorage) GetAllMetrics(ctx context.Context) ([]model.Metrics, error) {
+	metrics := make([]model.Metrics, 0) // Add some capacity here?
 
 	rows, err := ps.database.QueryContext(ctx, "SELECT id, mtype, delta, value FROM metrics")
 	if err != nil {
@@ -77,7 +79,7 @@ func (ps *PostgresStorage) GetAllMetrics(ctx context.Context) ([]Metrics, error)
 	defer rows.Close()
 
 	for rows.Next() {
-		var m Metrics
+		var m model.Metrics
 		var delta sql.NullInt64
 		var value sql.NullFloat64
 
@@ -87,20 +89,20 @@ func (ps *PostgresStorage) GetAllMetrics(ctx context.Context) ([]Metrics, error)
 		}
 
 		switch m.MType {
-		case Counter:
+		case model.Counter:
 			if delta.Valid {
 				m.Delta = &delta.Int64
 			} else {
-				return nil, ErrDeltaIsNil
+				return nil, model.ErrDeltaIsNil
 			}
-		case Gauge:
+		case model.Gauge:
 			if value.Valid {
 				m.Value = &value.Float64
 			} else {
-				return nil, ErrValueIsNil
+				return nil, model.ErrValueIsNil
 			}
 		default:
-			return nil, ErrUnknownMetricsType
+			return nil, model.ErrUnknownMetricsType
 		}
 
 		metrics = append(metrics, m) // What if the slice is getting quite big and holds everything in memory?
@@ -115,13 +117,13 @@ func (ps *PostgresStorage) GetAllMetrics(ctx context.Context) ([]Metrics, error)
 	return metrics, nil
 }
 
-func (ps *PostgresStorage) SaveBatch(ctx context.Context, metrics []Metrics) error {
+func (ps *PostgresStorage) SaveBatch(ctx context.Context, metrics []model.Metrics) error {
 	if len(metrics) == 0 {
 		return nil
 	}
 
 	for _, m := range metrics {
-		if err := validateMetrics(&m); err != nil {
+		if err := model.ValidateMetrics(&m); err != nil {
 			return err
 		}
 	}
@@ -154,9 +156,9 @@ type sqlExecutor interface {
 	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
 }
 
-func (ps *PostgresStorage) saveMetricsWithExecutor(ctx context.Context, executor sqlExecutor, m *Metrics) error {
+func (ps *PostgresStorage) saveMetricsWithExecutor(ctx context.Context, executor sqlExecutor, m *model.Metrics) error {
 	switch m.MType {
-	case Counter:
+	case model.Counter:
 		_, err := executor.ExecContext(ctx,
 			"INSERT INTO metrics (id, mtype, delta) VALUES ($1, $2, $3) ON CONFLICT (id, mtype) DO UPDATE SET delta = metrics.delta + EXCLUDED.delta",
 			m.ID,
@@ -165,7 +167,7 @@ func (ps *PostgresStorage) saveMetricsWithExecutor(ctx context.Context, executor
 		if err != nil {
 			return err
 		}
-	case Gauge:
+	case model.Gauge:
 		_, err := executor.ExecContext(ctx,
 			"INSERT INTO metrics (id, mtype, value) VALUES ($1, $2, $3) ON CONFLICT (id, mtype) DO UPDATE SET value = EXCLUDED.value",
 			m.ID,

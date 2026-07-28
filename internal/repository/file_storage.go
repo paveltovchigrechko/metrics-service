@@ -1,4 +1,4 @@
-package model
+package repository
 
 import (
 	"context"
@@ -6,6 +6,8 @@ import (
 	"errors"
 	"os"
 	"strings"
+
+	"github.com/paveltovchigrechko/metrics-service/internal/model"
 )
 
 // FileStorage represents a local stored JSON-file with metrics.
@@ -32,7 +34,7 @@ func (fs *FileStorage) Load(storage Storage) error {
 		return err
 	}
 
-	metrics := make([]Metrics, 0)
+	metrics := make([]model.Metrics, 0)
 	err = json.Unmarshal(bytes, &metrics)
 	if err != nil {
 		return err

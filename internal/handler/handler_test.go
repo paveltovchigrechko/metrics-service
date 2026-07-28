@@ -12,6 +12,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/paveltovchigrechko/metrics-service/internal/common"
 	models "github.com/paveltovchigrechko/metrics-service/internal/model"
+	"github.com/paveltovchigrechko/metrics-service/internal/repository"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -75,7 +76,7 @@ func newRequestWithChiParams(method, target string, params map[string]string) *h
 // ==========================================
 
 func TestNewHandler(t *testing.T) {
-	s := models.NewMemStorage()
+	s := repository.NewMemStorage()
 	h := NewHandler(s, nil, nil)
 
 	assert.NotNil(t, h)
@@ -165,7 +166,7 @@ func TestPostMetrics(t *testing.T) {
 				request.Header.Set(key, value)
 			}
 
-			s := models.NewMemStorage()
+			s := repository.NewMemStorage()
 			var updateFunc func() error
 			if test.updateErr != nil {
 				updateFunc = func() error { return test.updateErr }
@@ -251,7 +252,7 @@ func TestMetricsValue(t *testing.T) {
 	tests := []struct {
 		name         string
 		params       map[string]string
-		mockStorage  func() models.Storage
+		mockStorage  func() repository.Storage
 		expectedCode int
 		expectedBody string
 	}{
@@ -261,7 +262,7 @@ func TestMetricsValue(t *testing.T) {
 				"metricsType": "counter",
 				"metricsName": "PollCount",
 			},
-			mockStorage: func() models.Storage {
+			mockStorage: func() repository.Storage {
 				m := &MockStorage{}
 				m.OnGetMetrics = func(ctx context.Context, name, mtype string) (*models.Metrics, error) {
 					return &models.Metrics{ID: "PollCount", MType: "counter", Delta: ptr(int64(45))}, nil
@@ -277,7 +278,7 @@ func TestMetricsValue(t *testing.T) {
 				"metricsType": "gauge",
 				"metricsName": "Alloc",
 			},
-			mockStorage: func() models.Storage {
+			mockStorage: func() repository.Storage {
 				m := &MockStorage{}
 				m.OnGetMetrics = func(ctx context.Context, name, mtype string) (*models.Metrics, error) {
 					return &models.Metrics{ID: "Alloc", MType: "gauge", Value: ptr(1234.56)}, nil
@@ -293,7 +294,7 @@ func TestMetricsValue(t *testing.T) {
 				"metricsType": "gauge",
 				"metricsName": "NonExistent",
 			},
-			mockStorage: func() models.Storage {
+			mockStorage: func() repository.Storage {
 				m := &MockStorage{}
 				m.OnGetMetrics = func(ctx context.Context, name, mtype string) (*models.Metrics, error) {
 					return nil, errors.New("not found")
@@ -369,7 +370,7 @@ func TestUpdateEndpoint(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			s := models.NewMemStorage()
+			s := repository.NewMemStorage()
 			var updateFunc func() error
 			if tt.updateErr != nil {
 				updateFunc = func() error { return tt.updateErr }
@@ -394,7 +395,7 @@ func TestUpdatesEndpoint(t *testing.T) {
 		name         string
 		contentType  string
 		body         string
-		setupStorage func() models.Storage
+		setupStorage func() repository.Storage
 		updateErr    error
 		wantStatus   int
 	}{
@@ -402,7 +403,7 @@ func TestUpdatesEndpoint(t *testing.T) {
 			name:        "successfully process batch updates",
 			contentType: "application/json",
 			body:        `[{"id":"PollCount","type":"counter","delta":10}]`,
-			setupStorage: func() models.Storage {
+			setupStorage: func() repository.Storage {
 				m := &MockStorage{}
 				m.OnSaveBatch = func(ctx context.Context, metrics []models.Metrics) error {
 					return nil
@@ -415,7 +416,7 @@ func TestUpdatesEndpoint(t *testing.T) {
 			name:        "invalid content type returns bad request",
 			contentType: "text/plain",
 			body:        `[{"id":"PollCount","type":"counter","delta":10}]`,
-			setupStorage: func() models.Storage {
+			setupStorage: func() repository.Storage {
 				return &MockStorage{}
 			},
 			wantStatus: http.StatusBadRequest,
@@ -424,7 +425,7 @@ func TestUpdatesEndpoint(t *testing.T) {
 			name:        "validation error from storage returns bad request",
 			contentType: "application/json",
 			body:        `[{"id":"BadCounter","type":"counter"}]`,
-			setupStorage: func() models.Storage {
+			setupStorage: func() repository.Storage {
 				m := &MockStorage{}
 				m.OnSaveBatch = func(ctx context.Context, metrics []models.Metrics) error {
 					return models.ErrDeltaIsNil
@@ -437,7 +438,7 @@ func TestUpdatesEndpoint(t *testing.T) {
 			name:        "storage internal error returns internal server error",
 			contentType: "application/json",
 			body:        `[{"id":"PollCount","type":"counter","delta":10}]`,
-			setupStorage: func() models.Storage {
+			setupStorage: func() repository.Storage {
 				m := &MockStorage{}
 				m.OnSaveBatch = func(ctx context.Context, metrics []models.Metrics) error {
 					return errors.New("database connection lost")
@@ -470,7 +471,7 @@ func TestValueEndpoint(t *testing.T) {
 		name         string
 		contentType  string
 		body         string
-		setupStorage func() models.Storage
+		setupStorage func() repository.Storage
 		wantStatus   int
 		wantInBody   string
 	}{
@@ -478,7 +479,7 @@ func TestValueEndpoint(t *testing.T) {
 			name:        "successfully get counter value",
 			contentType: "application/json",
 			body:        `{"id": "PollCount", "type": "counter"}`,
-			setupStorage: func() models.Storage {
+			setupStorage: func() repository.Storage {
 				m := &MockStorage{}
 				m.OnGetMetrics = func(ctx context.Context, name, mtype string) (*models.Metrics, error) {
 					return &models.Metrics{ID: "PollCount", MType: "counter", Delta: ptr(int64(42))}, nil
@@ -492,7 +493,7 @@ func TestValueEndpoint(t *testing.T) {
 			name:        "successfully get gauge value",
 			contentType: "application/json",
 			body:        `{"id": "Alloc", "type": "gauge"}`,
-			setupStorage: func() models.Storage {
+			setupStorage: func() repository.Storage {
 				m := &MockStorage{}
 				m.OnGetMetrics = func(ctx context.Context, name, mtype string) (*models.Metrics, error) {
 					return &models.Metrics{ID: "Alloc", MType: "gauge", Value: ptr(12.34)}, nil
@@ -506,7 +507,7 @@ func TestValueEndpoint(t *testing.T) {
 			name:        "metric not found",
 			contentType: "application/json",
 			body:        `{"id": "Missing", "type": "gauge"}`,
-			setupStorage: func() models.Storage {
+			setupStorage: func() repository.Storage {
 				m := &MockStorage{}
 				m.OnGetMetrics = func(ctx context.Context, name, mtype string) (*models.Metrics, error) {
 					return nil, errors.New("not found")
@@ -519,7 +520,7 @@ func TestValueEndpoint(t *testing.T) {
 			name:        "incorrect content type",
 			contentType: "text/plain",
 			body:        `{"id": "Alloc", "type": "gauge"}`,
-			setupStorage: func() models.Storage {
+			setupStorage: func() repository.Storage {
 				return &MockStorage{}
 			},
 			wantStatus: http.StatusBadRequest,
@@ -528,7 +529,7 @@ func TestValueEndpoint(t *testing.T) {
 			name:        "type mismatch in found metric",
 			contentType: "application/json",
 			body:        `{"id": "Alloc", "type": "counter"}`, // requesting counter
-			setupStorage: func() models.Storage {
+			setupStorage: func() repository.Storage {
 				m := &MockStorage{}
 				m.OnGetMetrics = func(ctx context.Context, name, mtype string) (*models.Metrics, error) {
 					return &models.Metrics{ID: "Alloc", MType: "gauge", Value: ptr(12.34)}, nil // returns gauge
@@ -677,7 +678,7 @@ func TestProcessMetrics(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			s := models.NewMemStorage()
+			s := repository.NewMemStorage()
 			h := NewHandler(s, nil, nil)
 
 			err := h.processMetrics(tc.req)

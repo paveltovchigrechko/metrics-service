@@ -1,54 +1,56 @@
-package model
+package repository
 
 import (
 	"context"
 	"sync"
+
+	"github.com/paveltovchigrechko/metrics-service/internal/model"
 )
 
 type MemStorage struct {
 	mu      sync.RWMutex
-	Metrics map[string]*Metrics
+	Metrics map[string]*model.Metrics
 }
 
 func NewMemStorage() *MemStorage {
 	return &MemStorage{
-		Metrics: make(map[string]*Metrics),
+		Metrics: make(map[string]*model.Metrics),
 	}
 }
 
 // Add validations
-func (ms *MemStorage) GetMetrics(ctx context.Context, name, mtype string) (*Metrics, error) {
+func (ms *MemStorage) GetMetrics(ctx context.Context, name, mtype string) (*model.Metrics, error) {
 	ms.mu.RLock()
 	defer ms.mu.RUnlock()
 
-	if err := validateName(name); err != nil {
+	if err := model.ValidateName(name); err != nil {
 		return nil, err
 	}
-	if err := validateType(mtype); err != nil {
+	if err := model.ValidateType(mtype); err != nil {
 		return nil, err
 	}
 
 	key := metricKey(name, mtype)
 	metrics, ok := ms.Metrics[key]
 	if !ok {
-		return nil, ErMetricsNotFound
+		return nil, model.ErrMetricsNotFound
 	}
 
 	return metrics, nil
 }
 
-func (ms *MemStorage) SaveMetrics(ctx context.Context, m *Metrics) error {
+func (ms *MemStorage) SaveMetrics(ctx context.Context, m *model.Metrics) error {
 	ms.mu.Lock()
 	defer ms.mu.Unlock()
 
 	return ms.saveMetricsLocked(m)
 }
 
-func (ms *MemStorage) GetAllMetrics(ctx context.Context) ([]Metrics, error) {
+func (ms *MemStorage) GetAllMetrics(ctx context.Context) ([]model.Metrics, error) {
 	ms.mu.RLock()
 	defer ms.mu.RUnlock()
 
-	metrics := make([]Metrics, 0, len(ms.Metrics))
+	metrics := make([]model.Metrics, 0, len(ms.Metrics))
 	for _, m := range ms.Metrics {
 		metrics = append(metrics, *m)
 	}
@@ -56,12 +58,12 @@ func (ms *MemStorage) GetAllMetrics(ctx context.Context) ([]Metrics, error) {
 	return metrics, nil
 }
 
-func (ms *MemStorage) SaveBatch(ctx context.Context, metrics []Metrics) error {
+func (ms *MemStorage) SaveBatch(ctx context.Context, metrics []model.Metrics) error {
 	ms.mu.RLock()
 	defer ms.mu.RUnlock()
 
 	for i := range metrics {
-		if err := validateMetrics(&metrics[i]); err != nil {
+		if err := model.ValidateMetrics(&metrics[i]); err != nil {
 			return err
 		}
 	}
@@ -79,8 +81,8 @@ func metricKey(name, mtype string) string {
 	return mtype + ":" + name
 }
 
-func (ms *MemStorage) saveMetricsLocked(m *Metrics) error {
-	if err := validateMetrics(m); err != nil {
+func (ms *MemStorage) saveMetricsLocked(m *model.Metrics) error {
+	if err := model.ValidateMetrics(m); err != nil {
 		return err
 	}
 
@@ -92,10 +94,10 @@ func (ms *MemStorage) saveMetricsLocked(m *Metrics) error {
 	}
 
 	switch m.MType {
-	case Counter:
+	case model.Counter:
 		newValue := *current.Delta + *m.Delta
 		current.Delta = &newValue
-	case Gauge:
+	case model.Gauge:
 		current.Value = m.Value
 	}
 

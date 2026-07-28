@@ -14,7 +14,7 @@ import (
 	"github.com/paveltovchigrechko/metrics-service/internal/config"
 	"github.com/paveltovchigrechko/metrics-service/internal/config/db"
 	"github.com/paveltovchigrechko/metrics-service/internal/handler"
-	models "github.com/paveltovchigrechko/metrics-service/internal/model"
+	"github.com/paveltovchigrechko/metrics-service/internal/repository"
 )
 
 type storageMode int
@@ -29,8 +29,8 @@ type Server struct {
 	cfg         *config.ServerConfig
 	handler     *handler.AppHandler
 	router      *chi.Mux
-	storage     models.Storage
-	fileStorage *models.FileStorage
+	storage     repository.Storage
+	fileStorage *repository.FileStorage
 	closer      io.Closer // This is for closing database
 }
 
@@ -39,8 +39,8 @@ func New(c *config.ServerConfig, middlewares ...func(http.Handler) http.Handler)
 
 	// Set up storage
 	var database *sql.DB
-	var storage models.Storage
-	var fs *models.FileStorage
+	var storage repository.Storage
+	var fs *repository.FileStorage
 	var updateFunc func() error
 	var err error
 	var closer io.Closer
@@ -56,11 +56,11 @@ func New(c *config.ServerConfig, middlewares ...func(http.Handler) http.Handler)
 			database.Close()
 			return nil, err
 		}
-		storage = models.NewPostgresStorage(database)
+		storage = repository.NewPostgresStorage(database)
 		closer = database
 	case fileMode:
-		storage = models.NewMemStorage()
-		fs, err = models.NewFileStorage(c.FileStoragePath)
+		storage = repository.NewMemStorage()
+		fs, err = repository.NewFileStorage(c.FileStoragePath)
 		if err != nil {
 			return nil, err
 		}
@@ -78,7 +78,7 @@ func New(c *config.ServerConfig, middlewares ...func(http.Handler) http.Handler)
 			}
 		}
 	case memoryMode:
-		storage = models.NewMemStorage()
+		storage = repository.NewMemStorage()
 	}
 
 	var pinger handler.Pinger
@@ -129,7 +129,7 @@ func (s *Server) setHandlers() {
 	s.router.Post("/update", s.handler.UpdateEndpoint)
 	s.router.Post("/update/", s.handler.UpdateEndpoint) // Keep for autotests
 	s.router.Post("/updates", s.handler.UpdatesEndpoint)
-	s.router.Post("/updates/", s.handler.UpdatesEndpoint)
+	s.router.Post("/updates/", s.handler.UpdatesEndpoint) // Keep for autotests
 	s.router.Post("/value", s.handler.ValueEndpoint)
 	s.router.Post("/value/", s.handler.ValueEndpoint) // Keep for autotests
 	s.router.Get("/", s.handler.MainPage)

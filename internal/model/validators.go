@@ -6,7 +6,7 @@ import (
 )
 
 var (
-	ErMetricsNotFound       = errors.New("metrics not found")
+	ErrMetricsNotFound      = errors.New("metrics not found")
 	ErrEmptyMetricsID       = errors.New("metrics id is empty")
 	ErrUnknownMetricsType   = errors.New("unknown metrics type")
 	ErrDeltaIsNil           = errors.New("counter metrics delta is nil")
@@ -15,7 +15,7 @@ var (
 	ErrMetricsIsNil         = errors.New("metrics is nil")
 )
 
-func validateName(name string) error {
+func ValidateName(name string) error {
 	if strings.Trim(name, " ") == "" {
 		return ErrEmptyMetricsID
 	}
@@ -23,7 +23,7 @@ func validateName(name string) error {
 	return nil
 }
 
-func validateType(mtype string) error {
+func ValidateType(mtype string) error {
 	if mtype != Counter && mtype != Gauge {
 		return ErrUnknownMetricsType
 	}
@@ -31,15 +31,15 @@ func validateType(mtype string) error {
 	return nil
 }
 
-func validateMetrics(m *Metrics) error {
+func ValidateMetrics(m *Metrics) error {
 	if m == nil {
 		return ErrMetricsIsNil
 	}
-	if err := validateName(m.ID); err != nil {
+	if err := ValidateName(m.ID); err != nil {
 		return err
 	}
 
-	if err := validateType(m.MType); err != nil {
+	if err := ValidateType(m.MType); err != nil {
 		return err
 	}
 

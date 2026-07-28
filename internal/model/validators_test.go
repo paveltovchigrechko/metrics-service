@@ -3,6 +3,7 @@ package model
 import (
 	"testing"
 
+	"github.com/paveltovchigrechko/metrics-service/internal/common"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -31,7 +32,7 @@ func TestValidateName(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			err := validateName(tc.input)
+			err := ValidateName(tc.input)
 			assert.ErrorIs(t, err, tc.expectedError)
 		})
 	}
@@ -62,7 +63,7 @@ func TestValidateType(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			err := validateType(tc.input)
+			err := ValidateType(tc.input)
 			assert.ErrorIs(t, err, tc.expectedError)
 		})
 	}
@@ -84,7 +85,7 @@ func TestValidateMetrics(t *testing.T) {
 			metric: &Metrics{
 				ID:    "",
 				MType: Counter,
-				Delta: ptr(int64(10)),
+				Delta: common.Ptr(int64(10)),
 			},
 			expectedError: ErrEmptyMetricsID,
 		},
@@ -101,8 +102,8 @@ func TestValidateMetrics(t *testing.T) {
 			metric: &Metrics{
 				ID:    "InvalidMetric",
 				MType: Counter,
-				Delta: ptr(int64(10)),
-				Value: ptr(5.5),
+				Delta: common.Ptr(int64(10)),
+				Value: common.Ptr(5.5),
 			},
 			expectedError: ErrDeltaAndValuePresent,
 		},
@@ -120,7 +121,7 @@ func TestValidateMetrics(t *testing.T) {
 			metric: &Metrics{
 				ID:    "PollCount",
 				MType: Counter,
-				Delta: ptr(int64(1)),
+				Delta: common.Ptr(int64(1)),
 			},
 			expectedError: nil,
 		},
@@ -138,7 +139,7 @@ func TestValidateMetrics(t *testing.T) {
 			metric: &Metrics{
 				ID:    "Alloc",
 				MType: Gauge,
-				Value: ptr(100.5),
+				Value: common.Ptr(100.5),
 			},
 			expectedError: nil,
 		},
@@ -146,7 +147,7 @@ func TestValidateMetrics(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			err := validateMetrics(tc.metric)
+			err := ValidateMetrics(tc.metric)
 			assert.ErrorIs(t, err, tc.expectedError)
 		})
 	}

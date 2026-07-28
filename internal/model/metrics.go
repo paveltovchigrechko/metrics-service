@@ -32,7 +32,7 @@ func CreateMetrics(name, mtype string, delta int64, value float64) (*Metrics, er
 		return nil, ErrUnknownMetricsType
 	}
 
-	if err := validateMetrics(m); err != nil {
+	if err := ValidateMetrics(m); err != nil {
 		return nil, err
 	}
 

@@ -1,4 +1,4 @@
-package model
+package repository
 
 import (
 	"encoding/json"
@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/paveltovchigrechko/metrics-service/internal/common"
+	"github.com/paveltovchigrechko/metrics-service/internal/model"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -64,7 +66,7 @@ func TestFileStorage_Load(t *testing.T) {
 
 		mockStorage := new(MockStorage)
 
-		mockStorage.On("SaveBatch", mock.Anything, mock.MatchedBy(func(metrics []Metrics) bool {
+		mockStorage.On("SaveBatch", mock.Anything, mock.MatchedBy(func(metrics []model.Metrics) bool {
 			return len(metrics) == 1 && metrics[0].ID == "LoadCount" && metrics[0].Delta != nil && *metrics[0].Delta == 10
 		})).Return(nil)
 
@@ -117,16 +119,16 @@ func TestFileStorage_Load(t *testing.T) {
 }
 
 func TestFileStorage_Save(t *testing.T) {
-	testMetrics := []Metrics{
+	testMetrics := []model.Metrics{
 		{
 			ID:    "Alloc",
-			MType: Gauge,
-			Value: float64Ptr(12.34),
+			MType: model.Gauge,
+			Value: common.Float64Ptr(12.34),
 		},
 		{
 			ID:    "PollCount",
-			MType: Counter,
-			Delta: int64Ptr(10),
+			MType: model.Counter,
+			Delta: common.Int64Ptr(10),
 		},
 	}
 
@@ -147,7 +149,7 @@ func TestFileStorage_Save(t *testing.T) {
 		bytes, err := os.ReadFile(filePath)
 		assert.NoError(t, err)
 
-		var savedMetrics []Metrics
+		var savedMetrics []model.Metrics
 		err = json.Unmarshal(bytes, &savedMetrics)
 		assert.NoError(t, err)
 
