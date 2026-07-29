@@ -10,14 +10,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/paveltovchigrechko/metrics-service/internal/common"
 	"github.com/paveltovchigrechko/metrics-service/internal/config"
 	models "github.com/paveltovchigrechko/metrics-service/internal/model"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
-
-// Helper to construct a pointer value
-func int64Ptr(v int64) *int64 { return &v }
 
 func TestNewServer(t *testing.T) {
 	t.Run("Standard initialization without restore", func(t *testing.T) {
@@ -44,7 +42,7 @@ func TestNewServer(t *testing.T) {
 			{
 				ID:    "ExistingCounter",
 				MType: models.Counter,
-				Delta: int64Ptr(120),
+				Delta: common.Int64Ptr(120),
 			},
 		}
 		bytes, err := json.Marshal(historicalMetrics)
@@ -174,6 +172,8 @@ func TestServer_setHandlers(t *testing.T) {
 		{http.MethodPost, "/update/gauge/Alloc/12.34"},
 		{http.MethodPost, "/update"},
 		{http.MethodPost, "/update/"},
+		{http.MethodPost, "/updates"},
+		{http.MethodPost, "/updates/"},
 		{http.MethodPost, "/value"},
 		{http.MethodPost, "/value/"},
 		{http.MethodGet, "/"},
@@ -212,7 +212,7 @@ func TestServer_runStoreLoop(t *testing.T) {
 	err = srv.storage.SaveMetrics(context.Background(), &models.Metrics{
 		ID:    "ActiveSessions",
 		MType: models.Counter,
-		Delta: int64Ptr(777),
+		Delta: common.Int64Ptr(777),
 	})
 	require.NoError(t, err)
 

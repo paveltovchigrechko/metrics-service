@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/paveltovchigrechko/metrics-service/internal/common"
 	"github.com/paveltovchigrechko/metrics-service/internal/logger"
 	models "github.com/paveltovchigrechko/metrics-service/internal/model"
 	"github.com/paveltovchigrechko/metrics-service/internal/repository"
@@ -293,7 +292,7 @@ func parseMetrics(req *http.Request) (*models.Metrics, error) {
 	return &m, nil
 }
 
-func parseUpdateMetrics(jsonMetrics *common.Metrics) (*models.Metrics, error) {
+func parseUpdateMetrics(jsonMetrics *models.Metrics) (*models.Metrics, error) {
 	if jsonMetrics.ID == "" {
 		return nil, models.ErrEmptyMetricsID
 	}
@@ -322,7 +321,7 @@ func parseUpdateMetrics(jsonMetrics *common.Metrics) (*models.Metrics, error) {
 	return m, nil
 }
 
-func parseValueMetrics(jsonMetrics *common.Metrics) (string, string, error) {
+func parseValueMetrics(jsonMetrics *models.Metrics) (string, string, error) {
 	if jsonMetrics.ID == "" {
 		return "", "", models.ErrEmptyMetricsID
 	}
@@ -334,8 +333,8 @@ func parseValueMetrics(jsonMetrics *common.Metrics) (string, string, error) {
 	return jsonMetrics.ID, jsonMetrics.MType, nil
 }
 
-func decodeJSONMetrics(req *http.Request) (*common.Metrics, error) {
-	var jsonMetrics common.Metrics
+func decodeJSONMetrics(req *http.Request) (*models.Metrics, error) {
+	var jsonMetrics models.Metrics
 	decoder := json.NewDecoder(req.Body)
 	decoder.DisallowUnknownFields()
 

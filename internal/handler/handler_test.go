@@ -10,7 +10,6 @@ import (
 	"testing"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/paveltovchigrechko/metrics-service/internal/common"
 	models "github.com/paveltovchigrechko/metrics-service/internal/model"
 	"github.com/paveltovchigrechko/metrics-service/internal/repository"
 	"github.com/stretchr/testify/assert"
@@ -784,13 +783,13 @@ func TestParseMetrics(t *testing.T) {
 func TestParseUpdateMetrics(t *testing.T) {
 	tests := []struct {
 		name      string
-		input     *common.Metrics
+		input     *models.Metrics
 		expectErr bool
 		verify    func(t *testing.T, m *models.Metrics)
 	}{
 		{
 			name: "valid counter translation",
-			input: &common.Metrics{
+			input: &models.Metrics{
 				ID:    "PollCount",
 				MType: "counter",
 				Delta: ptr(int64(5)),
@@ -805,7 +804,7 @@ func TestParseUpdateMetrics(t *testing.T) {
 		},
 		{
 			name: "valid gauge translation",
-			input: &common.Metrics{
+			input: &models.Metrics{
 				ID:    "Alloc",
 				MType: "gauge",
 				Value: ptr(743.21),
@@ -820,7 +819,7 @@ func TestParseUpdateMetrics(t *testing.T) {
 		},
 		{
 			name: "empty metric id",
-			input: &common.Metrics{
+			input: &models.Metrics{
 				MType: "counter",
 				Delta: ptr(int64(5)),
 			},
@@ -828,7 +827,7 @@ func TestParseUpdateMetrics(t *testing.T) {
 		},
 		{
 			name: "missing counter delta",
-			input: &common.Metrics{
+			input: &models.Metrics{
 				ID:    "PollCount",
 				MType: "counter",
 			},
@@ -836,7 +835,7 @@ func TestParseUpdateMetrics(t *testing.T) {
 		},
 		{
 			name: "missing gauge value",
-			input: &common.Metrics{
+			input: &models.Metrics{
 				ID:    "Alloc",
 				MType: "gauge",
 			},
@@ -844,7 +843,7 @@ func TestParseUpdateMetrics(t *testing.T) {
 		},
 		{
 			name: "unknown metric type",
-			input: &common.Metrics{
+			input: &models.Metrics{
 				ID:    "Alloc",
 				MType: "invalid-type",
 				Value: ptr(10.0),
@@ -869,33 +868,33 @@ func TestParseUpdateMetrics(t *testing.T) {
 func TestParseValueMetrics(t *testing.T) {
 	tests := []struct {
 		name      string
-		input     *common.Metrics
+		input     *models.Metrics
 		expectErr bool
 		wantID    string
 		wantType  string
 	}{
 		{
 			name:      "valid counter template retrieval",
-			input:     &common.Metrics{ID: "PollCount", MType: "counter"},
+			input:     &models.Metrics{ID: "PollCount", MType: "counter"},
 			expectErr: false,
 			wantID:    "PollCount",
 			wantType:  "counter",
 		},
 		{
 			name:      "valid gauge template retrieval",
-			input:     &common.Metrics{ID: "Alloc", MType: "gauge"},
+			input:     &models.Metrics{ID: "Alloc", MType: "gauge"},
 			expectErr: false,
 			wantID:    "Alloc",
 			wantType:  "gauge",
 		},
 		{
 			name:      "missing metric id",
-			input:     &common.Metrics{MType: "counter"},
+			input:     &models.Metrics{MType: "counter"},
 			expectErr: true,
 		},
 		{
 			name:      "unknown metrics type value request",
-			input:     &common.Metrics{ID: "Alloc", MType: "unknown"},
+			input:     &models.Metrics{ID: "Alloc", MType: "unknown"},
 			expectErr: true,
 		},
 	}
@@ -919,13 +918,13 @@ func TestDecodeJSONMetrics(t *testing.T) {
 		name      string
 		body      string
 		expectErr bool
-		verify    func(t *testing.T, m *common.Metrics)
+		verify    func(t *testing.T, m *models.Metrics)
 	}{
 		{
 			name:      "decode completely valid gauge struct",
 			body:      `{"id":"Alloc","type":"gauge","value":54.12}`,
 			expectErr: false,
-			verify: func(t *testing.T, m *common.Metrics) {
+			verify: func(t *testing.T, m *models.Metrics) {
 				require.NotNil(t, m)
 				assert.Equal(t, "Alloc", m.ID)
 				assert.Equal(t, "gauge", m.MType)
