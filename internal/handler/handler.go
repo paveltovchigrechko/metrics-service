@@ -138,13 +138,13 @@ func (h *AppHandler) UpdateEndpoint(w http.ResponseWriter, req *http.Request) {
 	}
 
 	// No need for parsing, just validate here.
-	metrics, err := parseUpdateMetrics(parsedMetrics)
+	err = model.ValidateMetrics(parsedMetrics)
 	if err != nil {
 		WriteError(w, err, http.StatusBadRequest)
 		return
 	}
 
-	err = h.storage.SaveMetrics(req.Context(), metrics)
+	err = h.storage.SaveMetrics(req.Context(), parsedMetrics)
 	if err != nil {
 		WriteError(w, err, http.StatusBadRequest)
 		return
@@ -211,20 +211,23 @@ func (h *AppHandler) ValueEndpoint(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	// Just validate and check the error. Use ID and MType after.
-	name, mType, err := parseValueMetrics(decodedMetrics)
-	if err != nil {
+	if err = model.ValidateName(decodedMetrics.ID); err != nil {
 		WriteError(w, err, http.StatusBadRequest)
 		return
 	}
 
-	m, err := h.storage.GetMetrics(req.Context(), name, mType)
+	if err := model.ValidateType(decodedMetrics.MType); err != nil {
+		WriteError(w, err, http.StatusBadRequest)
+		return
+	}
+
+	m, err := h.storage.GetMetrics(req.Context(), decodedMetrics.ID, decodedMetrics.MType)
 	if err != nil {
 		WriteError(w, err, http.StatusNotFound)
 		return
 	}
 
-	if mType != m.MType {
+	if decodedMetrics.MType != m.MType {
 		WriteError(w, errors.New("metrics type does not match"), http.StatusBadRequest)
 		return
 	}
@@ -293,49 +296,6 @@ func parseMetrics(req *http.Request) (*models.Metrics, error) {
 	}
 
 	return &m, nil
-}
-
-// Delete?
-func parseUpdateMetrics(jsonMetrics *models.Metrics) (*models.Metrics, error) {
-	if jsonMetrics.ID == "" {
-		return nil, models.ErrEmptyMetricsID
-	}
-
-	var m *models.Metrics
-	var err error
-
-	switch jsonMetrics.MType {
-	case models.Counter:
-		if jsonMetrics.Delta == nil {
-			return nil, models.ErrDeltaIsNil
-		}
-		m, err = models.CreateMetrics(jsonMetrics.ID, jsonMetrics.MType, *jsonMetrics.Delta, 0)
-	case models.Gauge:
-		if jsonMetrics.Value == nil {
-			return nil, models.ErrValueIsNil
-		}
-		m, err = models.CreateMetrics(jsonMetrics.ID, jsonMetrics.MType, 0, *jsonMetrics.Value)
-	default:
-		return nil, models.ErrUnknownMetricsType
-	}
-
-	if err != nil {
-		return nil, err
-	}
-	return m, nil
-}
-
-// Delete?
-func parseValueMetrics(jsonMetrics *models.Metrics) (string, string, error) {
-	if err := model.ValidateName(jsonMetrics.ID); err != nil {
-		return "", "", err
-	}
-
-	if err := model.ValidateType(jsonMetrics.MType); err != nil {
-		return "", "", models.ErrUnknownMetricsType
-	}
-
-	return jsonMetrics.ID, jsonMetrics.MType, nil
 }
 
 func decodeJSONMetrics(req *http.Request) (*models.Metrics, error) {
