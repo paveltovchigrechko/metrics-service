@@ -11,6 +11,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/paveltovchigrechko/metrics-service/internal/logger"
+	"github.com/paveltovchigrechko/metrics-service/internal/model"
 	models "github.com/paveltovchigrechko/metrics-service/internal/model"
 	"github.com/paveltovchigrechko/metrics-service/internal/repository"
 )
@@ -136,6 +137,7 @@ func (h *AppHandler) UpdateEndpoint(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	// No need for parsing, just validate here.
 	metrics, err := parseUpdateMetrics(parsedMetrics)
 	if err != nil {
 		WriteError(w, err, http.StatusBadRequest)
@@ -209,6 +211,7 @@ func (h *AppHandler) ValueEndpoint(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	// Just validate and check the error. Use ID and MType after.
 	name, mType, err := parseValueMetrics(decodedMetrics)
 	if err != nil {
 		WriteError(w, err, http.StatusBadRequest)
@@ -292,6 +295,7 @@ func parseMetrics(req *http.Request) (*models.Metrics, error) {
 	return &m, nil
 }
 
+// Delete?
 func parseUpdateMetrics(jsonMetrics *models.Metrics) (*models.Metrics, error) {
 	if jsonMetrics.ID == "" {
 		return nil, models.ErrEmptyMetricsID
@@ -321,12 +325,13 @@ func parseUpdateMetrics(jsonMetrics *models.Metrics) (*models.Metrics, error) {
 	return m, nil
 }
 
+// Delete?
 func parseValueMetrics(jsonMetrics *models.Metrics) (string, string, error) {
-	if jsonMetrics.ID == "" {
-		return "", "", models.ErrEmptyMetricsID
+	if err := model.ValidateName(jsonMetrics.ID); err != nil {
+		return "", "", err
 	}
 
-	if jsonMetrics.MType != models.Counter && jsonMetrics.MType != models.Gauge {
+	if err := model.ValidateType(jsonMetrics.MType); err != nil {
 		return "", "", models.ErrUnknownMetricsType
 	}
 

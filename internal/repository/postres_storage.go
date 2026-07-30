@@ -4,8 +4,11 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"strings"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/paveltovchigrechko/metrics-service/internal/model"
+	"github.com/paveltovchigrechko/metrics-service/internal/retry"
 )
 
 type PostgresStorage struct {
@@ -19,6 +22,38 @@ func NewPostgresStorage(db *sql.DB) *PostgresStorage {
 }
 
 func (ps *PostgresStorage) GetMetrics(ctx context.Context, name string, mType string) (*model.Metrics, error) {
+	var metrics *model.Metrics
+	err := retry.Do(ctx, isRetriablePgError, func() error {
+		var innerErr error
+		metrics, innerErr = ps.getMetrics(ctx, name, mType)
+		return innerErr
+	})
+	return metrics, err
+}
+
+func (ps *PostgresStorage) SaveMetrics(ctx context.Context, m *model.Metrics) error {
+	return retry.Do(ctx, isRetriablePgError, func() error {
+		return ps.saveMetrics(ctx, m)
+	})
+}
+
+func (ps *PostgresStorage) GetAllMetrics(ctx context.Context) ([]model.Metrics, error) {
+	var metrics []model.Metrics
+	err := retry.Do(ctx, isRetriablePgError, func() error {
+		var innerErr error
+		metrics, innerErr = ps.getAllMetrics(ctx)
+		return innerErr
+	})
+	return metrics, err
+}
+
+func (ps *PostgresStorage) SaveBatch(ctx context.Context, metrics []model.Metrics) error {
+	return retry.Do(ctx, isRetriablePgError, func() error {
+		return ps.saveBatch(ctx, metrics)
+	})
+}
+
+func (ps *PostgresStorage) getMetrics(ctx context.Context, name string, mType string) (*model.Metrics, error) {
 	if err := model.ValidateName(name); err != nil {
 		return nil, err
 	}
@@ -57,7 +92,7 @@ func (ps *PostgresStorage) GetMetrics(ctx context.Context, name string, mType st
 	return &m, nil
 }
 
-func (ps *PostgresStorage) SaveMetrics(ctx context.Context, m *model.Metrics) error {
+func (ps *PostgresStorage) saveMetrics(ctx context.Context, m *model.Metrics) error {
 	if err := model.ValidateMetrics(m); err != nil {
 		return err
 	}
@@ -69,7 +104,7 @@ func (ps *PostgresStorage) SaveMetrics(ctx context.Context, m *model.Metrics) er
 	return nil
 }
 
-func (ps *PostgresStorage) GetAllMetrics(ctx context.Context) ([]model.Metrics, error) {
+func (ps *PostgresStorage) getAllMetrics(ctx context.Context) ([]model.Metrics, error) {
 	metrics := make([]model.Metrics, 0) // Add some capacity here?
 
 	rows, err := ps.database.QueryContext(ctx, "SELECT id, mtype, delta, value FROM metrics")
@@ -117,7 +152,7 @@ func (ps *PostgresStorage) GetAllMetrics(ctx context.Context) ([]model.Metrics, 
 	return metrics, nil
 }
 
-func (ps *PostgresStorage) SaveBatch(ctx context.Context, metrics []model.Metrics) error {
+func (ps *PostgresStorage) saveBatch(ctx context.Context, metrics []model.Metrics) error {
 	if len(metrics) == 0 {
 		return nil
 	}
@@ -179,4 +214,19 @@ func (ps *PostgresStorage) saveMetricsWithExecutor(ctx context.Context, executor
 	}
 
 	return nil
+}
+
+func isRetriablePgError(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) {
+		if strings.HasPrefix(pgErr.Code, "08") {
+			return true
+		}
+	}
+
+	return false
 }

@@ -61,8 +61,19 @@ type Agent struct {
 
 func NewAgent(cfg *config.AgentConfig) *Agent {
 	m := new(runtime.MemStats)
+
 	c := resty.New().
-		SetTimeout(cfg.PollInterval) // remove?
+		SetTimeout(cfg.PollInterval). // remove?
+		SetRetryCount(3).
+		SetRetryWaitTime(1 * time.Second).
+		SetRetryMaxWaitTime(5 * time.Second).
+		AddRetryCondition(func(r *resty.Response, err error) bool {
+			if err != nil {
+				return true
+			}
+
+			return false
+		})
 
 	return &Agent{
 		m:           m,
@@ -366,26 +377,29 @@ func (a *Agent) sendMetricsJSON(metrics []*models.Metrics, gzipCompressed bool) 
 	}
 
 	url := fmt.Sprintf("http://%s/updates", a.cfg.ServerAddress)
-	body, err := json.Marshal(metrics) // use resty https://resty.dev/docs/content-type-encoder-and-decoder/#in-memory-marshal-and-unmarshal
-	if err != nil {
-		return err
-	}
+
+	var payload interface{} = metrics
+	var err error
 
 	req := a.client.R().
-		SetHeader("Content-Type", applicationJSON)
+		SetHeader("Content-Type", "application/json")
 
 	if gzipCompressed {
-		body, err = gzipCompressJSON(body)
+		rawJSON, err := json.Marshal(metrics)
 		if err != nil {
 			return err
 		}
 
-		req.SetHeader("Content-Encoding", gzipEncoding)
+		compressedBytes, err := gzipCompressJSON(rawJSON)
+		if err != nil {
+			return err
+		}
+
+		req.SetHeader("Content-Encoding", "gzip")
+		payload = compressedBytes
 	}
 
-	resp, err := req.SetHeader("Content-Type", applicationJSON).
-		SetBody(body).
-		Post(url)
+	resp, err := req.SetBody(payload).Post(url)
 
 	if err != nil {
 		return err
