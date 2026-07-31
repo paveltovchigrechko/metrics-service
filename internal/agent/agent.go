@@ -20,6 +20,7 @@ const (
 	textPlain       = "text/plain"
 	applicationJSON = "application/json"
 	gzipEncoding    = "gzip"
+	reqTimeout      = 5 * time.Second
 )
 
 type Agent struct {
@@ -63,7 +64,7 @@ func NewAgent(cfg *config.AgentConfig) *Agent {
 	m := new(runtime.MemStats)
 
 	c := resty.New().
-		SetTimeout(cfg.PollInterval). // remove?
+		SetTimeout(reqTimeout).
 		SetRetryCount(3).
 		SetRetryWaitTime(1 * time.Second).
 		SetRetryMaxWaitTime(5 * time.Second).
@@ -382,7 +383,7 @@ func (a *Agent) sendMetricsJSON(metrics []*models.Metrics, gzipCompressed bool) 
 	var err error
 
 	req := a.client.R().
-		SetHeader("Content-Type", "application/json")
+		SetHeader("Content-Type", applicationJSON)
 
 	if gzipCompressed {
 		rawJSON, err := json.Marshal(metrics)
@@ -395,7 +396,7 @@ func (a *Agent) sendMetricsJSON(metrics []*models.Metrics, gzipCompressed bool) 
 			return err
 		}
 
-		req.SetHeader("Content-Encoding", "gzip")
+		req.SetHeader("Content-Encoding", gzipEncoding)
 		payload = compressedBytes
 	}
 

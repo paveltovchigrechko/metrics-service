@@ -42,6 +42,9 @@ func (ms *MemStorage) GetMetrics(ctx context.Context, name, mtype string) (*mode
 func (ms *MemStorage) SaveMetrics(ctx context.Context, m *model.Metrics) error {
 	ms.mu.Lock()
 	defer ms.mu.Unlock()
+	if err := model.ValidateMetrics(m); err != nil {
+		return err
+	}
 
 	return ms.saveMetricsLocked(m)
 }
@@ -59,14 +62,14 @@ func (ms *MemStorage) GetAllMetrics(ctx context.Context) ([]model.Metrics, error
 }
 
 func (ms *MemStorage) SaveBatch(ctx context.Context, metrics []model.Metrics) error {
-	ms.mu.RLock()
-	defer ms.mu.RUnlock()
-
 	for i := range metrics {
 		if err := model.ValidateMetrics(&metrics[i]); err != nil {
 			return err
 		}
 	}
+
+	ms.mu.Lock()
+	defer ms.mu.Unlock()
 
 	for _, m := range metrics {
 		if err := ms.saveMetricsLocked(&m); err != nil {
@@ -82,10 +85,6 @@ func metricKey(name, mtype string) string {
 }
 
 func (ms *MemStorage) saveMetricsLocked(m *model.Metrics) error {
-	if err := model.ValidateMetrics(m); err != nil {
-		return err
-	}
-
 	key := metricKey(m.ID, m.MType)
 	current, existing := ms.Metrics[key]
 	if !existing {
