@@ -1,20 +1,8 @@
 package model
 
-import (
-	"encoding/json"
-	"errors"
-	"os"
-	"strings"
-)
-
 const (
 	Counter = "counter"
 	Gauge   = "gauge"
-)
-
-var (
-	ErrUnknownMetricsType = errors.New("unknown metrics type")
-	ErrEmptyMetricsID     = errors.New("metrics id is empty")
 )
 
 // NOTE: Не усложняем пример, вводя иерархическую вложенность структур.
@@ -31,10 +19,6 @@ type Metrics struct {
 }
 
 func CreateMetrics(name, mtype string, delta int64, value float64) (*Metrics, error) {
-	if strings.Trim(name, " ") == "" {
-		return nil, ErrEmptyMetricsID
-	}
-
 	m := &Metrics{}
 	m.ID = name
 	m.MType = mtype
@@ -48,27 +32,9 @@ func CreateMetrics(name, mtype string, delta int64, value float64) (*Metrics, er
 		return nil, ErrUnknownMetricsType
 	}
 
+	if err := ValidateMetrics(m); err != nil {
+		return nil, err
+	}
+
 	return m, nil
-}
-
-func RestoreMetrics(path string, storage Storage) error {
-	bytes, err := os.ReadFile(path)
-	if err != nil {
-		return err
-	}
-
-	metrics := make([]Metrics, 0)
-	err = json.Unmarshal(bytes, &metrics)
-	if err != nil {
-		return err
-	}
-
-	for i := range metrics {
-		err := storage.RestoreMetrics(&metrics[i])
-		if err != nil {
-			return err // We may want to skip a malformed metrics and try to recover the next one.
-		}
-	}
-
-	return nil
 }

@@ -20,6 +20,7 @@ const (
 	textPlain       = "text/plain"
 	applicationJSON = "application/json"
 	gzipEncoding    = "gzip"
+	reqTimeout      = 5 * time.Second
 )
 
 type Agent struct {
@@ -61,8 +62,19 @@ type Agent struct {
 
 func NewAgent(cfg *config.AgentConfig) *Agent {
 	m := new(runtime.MemStats)
+
 	c := resty.New().
-		SetTimeout(cfg.PollInterval) // remove?
+		SetTimeout(reqTimeout).
+		SetRetryCount(3).
+		SetRetryWaitTime(1 * time.Second).
+		SetRetryMaxWaitTime(5 * time.Second).
+		AddRetryCondition(func(r *resty.Response, err error) bool {
+			if err != nil {
+				return true
+			}
+
+			return false
+		})
 
 	return &Agent{
 		m:           m,
@@ -360,37 +372,42 @@ func (a *Agent) sendMetricsURL(metrics []*models.Metrics) error {
 	return nil
 }
 
-func (a *Agent) sendMetricsJSON(metrics []*models.Metrics, gzipEnabled bool) error {
-	url := fmt.Sprintf("http://%s/update", a.cfg.ServerAddress)
-	for _, m := range metrics {
-		body, err := json.Marshal(m) // use resty https://resty.dev/docs/content-type-encoder-and-decoder/#in-memory-marshal-and-unmarshal
+func (a *Agent) sendMetricsJSON(metrics []*models.Metrics, gzipCompressed bool) error {
+	if len(metrics) == 0 {
+		return nil
+	}
+
+	url := fmt.Sprintf("http://%s/updates", a.cfg.ServerAddress)
+
+	var payload interface{} = metrics
+	var err error
+
+	req := a.client.R().
+		SetHeader("Content-Type", applicationJSON)
+
+	if gzipCompressed {
+		rawJSON, err := json.Marshal(metrics)
 		if err != nil {
 			return err
 		}
 
-		req := a.client.R().
-			SetHeader("Content-Type", applicationJSON)
-
-		if gzipEnabled {
-			body, err = gzipCompressJSON(body)
-			if err != nil {
-				return err
-			}
-
-			req.SetHeader("Content-Encoding", gzipEncoding)
-		}
-
-		resp, err := req.SetHeader("Content-Type", applicationJSON).
-			SetBody(body).
-			Post(url)
-
+		compressedBytes, err := gzipCompressJSON(rawJSON)
 		if err != nil {
 			return err
 		}
 
-		if resp.IsError() {
-			return fmt.Errorf("server returned status %s", resp.Status())
-		}
+		req.SetHeader("Content-Encoding", gzipEncoding)
+		payload = compressedBytes
+	}
+
+	resp, err := req.SetBody(payload).Post(url)
+
+	if err != nil {
+		return err
+	}
+
+	if resp.IsError() {
+		return fmt.Errorf("server returned status %s", resp.Status())
 	}
 
 	return nil

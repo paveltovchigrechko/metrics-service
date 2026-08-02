@@ -15,10 +15,12 @@ const (
 	storeIntervalFlag   = "i"
 	fileStoragePathFlag = "f"
 	restoreFlag         = "r"
+	databaseDSNFlag     = "d"
 
 	defaultAddress         = "localhost:8080"
 	defaultStoreInterval   = 300
 	defaultFileStoragePath = "metrics.json"
+	defaultDatabaseDSN     = ""
 )
 
 var (
@@ -32,6 +34,7 @@ type ServerConfig struct {
 	StoreInterval   time.Duration // Interval for storing the server metrics. If value is 0, server saves metrics after each update.
 	FileStoragePath string        // Local file address to store server metrics.
 	Restore         bool          // Indicates if the server restores the metrics saved on FileStoragePath on start.
+	DatabaseDSN     string        // Address to connect to database.
 }
 
 // envServerCongig stores the environment variables. All fields are pointers to distinguish if a value was set.
@@ -40,6 +43,7 @@ type envServerConfig struct {
 	StoreInterval   *int    `env:"STORE_INTERVAL"`
 	FileStoragePath *string `env:"FILE_STORAGE_PATH"`
 	Restore         *bool   `env:"RESTORE"`
+	DatabaseDSN     *string `env:"DATABASE_DSN"`
 }
 
 // SetSeverConfig returns the final ServerConfig to use.
@@ -88,6 +92,11 @@ func mergeServerConfigs(envCfg *envServerConfig, flagCfg *ServerConfig) *ServerC
 		flagCfg.Restore = *envCfg.Restore
 	}
 
+	// Set database address
+	if envCfg.DatabaseDSN != nil {
+		flagCfg.DatabaseDSN = *envCfg.DatabaseDSN
+	}
+
 	return flagCfg
 }
 
@@ -99,6 +108,7 @@ func createServerFlagConfig(args []string) (*ServerConfig, error) {
 	storeInterval := fs.Int(storeIntervalFlag, defaultStoreInterval, "Metrics store interval in seconds")
 	fileStoragePath := fs.String(fileStoragePathFlag, defaultFileStoragePath, "File name to store metrics")
 	restore := fs.Bool(restoreFlag, true, "Indicate if server should restore metrics from the storage file")
+	databaseDSN := fs.String(databaseDSNFlag, defaultDatabaseDSN, "Database data source name")
 
 	err := fs.Parse(args)
 	if err != nil {
@@ -112,6 +122,7 @@ func createServerFlagConfig(args []string) (*ServerConfig, error) {
 		StoreInterval:   storeIntervalSec,
 		FileStoragePath: *fileStoragePath,
 		Restore:         *restore,
+		DatabaseDSN:     *databaseDSN,
 	}
 
 	return cfg, nil
@@ -126,7 +137,8 @@ func parseEnvServerConfig() (*envServerConfig, error) {
 		return nil, err
 	}
 
-	// Treat empty environment variables as error
+	// Treat empty environment variables as error.
+	// Don't check DATABASE_DSN: it's OK to have it empty.
 	if envCfg.FileStoragePath != nil && strings.Trim(*envCfg.FileStoragePath, " ") == "" {
 		return nil, errEmptyFileStoragePath
 	}

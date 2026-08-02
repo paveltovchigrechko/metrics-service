@@ -11,28 +11,34 @@ import (
 )
 
 func main() {
-	run()
-}
-
-func run() {
-	cfg, err := config.SetServerConfig(os.Args[1:])
+	err := run()
 	if err != nil {
 		log.Fatal(err)
+	}
+}
+
+func run() error {
+	cfg, err := config.SetServerConfig(os.Args[1:])
+	if err != nil {
+		return err
 	}
 
 	l, err := logger.New()
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 	defer l.Sync() // Flush at the end
 
-	serv, err := server.NewServer(cfg, logger.LoggerMiddleware(l), middleware.GZIPMiddleware)
+	serv, err := server.New(cfg, logger.LoggerMiddleware(l), middleware.GZIPMiddleware)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
+	defer serv.StopDB()
 
 	err = serv.Run()
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
+
+	return nil
 }

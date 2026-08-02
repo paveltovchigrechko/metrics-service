@@ -4,17 +4,19 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/paveltovchigrechko/metrics-service/internal/common"
 	models "github.com/paveltovchigrechko/metrics-service/internal/model"
+	"github.com/paveltovchigrechko/metrics-service/internal/repository"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
+
+	mock_handler "github.com/paveltovchigrechko/metrics-service/mocks"
 )
 
 // Pointer helpers for types
@@ -22,46 +24,40 @@ func ptr[T any](v T) *T {
 	return &v
 }
 
-// MockStorage implements models.Storage explicitly.
+// MockStorage implements models.Storage explicitly with context.Context as first argument.
 type MockStorage struct {
-	OnGetMetrics     func(string, string) (*models.Metrics, error)
-	OnListMetrics    func(io.Writer)
-	OnSaveMetrics    func(*models.Metrics) error
-	OnRestoreMetrics func(*models.Metrics) error
-	OnGetAllMetrics  func() []models.Metrics
+	OnGetMetrics    func(context.Context, string, string) (*models.Metrics, error)
+	OnSaveMetrics   func(context.Context, *models.Metrics) error
+	OnGetAllMetrics func(context.Context) ([]models.Metrics, error)
+	OnSaveBatch     func(context.Context, []models.Metrics) error
 }
 
-func (m *MockStorage) GetMetrics(name, mtype string) (*models.Metrics, error) {
+func (m *MockStorage) GetMetrics(ctx context.Context, name, mtype string) (*models.Metrics, error) {
 	if m.OnGetMetrics != nil {
-		return m.OnGetMetrics(name, mtype)
+		return m.OnGetMetrics(ctx, name, mtype)
 	}
 	return nil, nil
 }
 
-func (m *MockStorage) ListMetrics(w io.Writer) {
-	if m.OnListMetrics != nil {
-		m.OnListMetrics(w)
-	}
-}
-
-func (m *MockStorage) SaveMetrics(mt *models.Metrics) error {
+func (m *MockStorage) SaveMetrics(ctx context.Context, mt *models.Metrics) error {
 	if m.OnSaveMetrics != nil {
-		return m.OnSaveMetrics(mt)
+		return m.OnSaveMetrics(ctx, mt)
 	}
 	return nil
 }
 
-func (m *MockStorage) RestoreMetrics(mt *models.Metrics) error {
-	if m.OnRestoreMetrics != nil {
-		return m.OnRestoreMetrics(mt)
-	}
-	return nil
-}
-
-func (m *MockStorage) GetAllMetrics() []models.Metrics {
+func (m *MockStorage) GetAllMetrics(ctx context.Context) ([]models.Metrics, error) {
 	if m.OnGetAllMetrics != nil {
-		return m.OnGetAllMetrics()
+		return m.OnGetAllMetrics(ctx)
 	}
+	return nil, nil
+}
+
+func (m *MockStorage) SaveBatch(ctx context.Context, metrics []models.Metrics) error {
+	if m.OnSaveBatch != nil {
+		return m.OnSaveBatch(ctx, metrics)
+	}
+
 	return nil
 }
 
@@ -79,8 +75,8 @@ func newRequestWithChiParams(method, target string, params map[string]string) *h
 // ==========================================
 
 func TestNewHandler(t *testing.T) {
-	s := models.NewMemStorage()
-	h := NewHandler(s, nil)
+	s := repository.NewMemStorage()
+	h := NewHandler(s, nil, nil)
 
 	assert.NotNil(t, h)
 	assert.NotNil(t, h.storage)
@@ -169,12 +165,12 @@ func TestPostMetrics(t *testing.T) {
 				request.Header.Set(key, value)
 			}
 
-			s := models.NewMemStorage()
+			s := repository.NewMemStorage()
 			var updateFunc func() error
 			if test.updateErr != nil {
 				updateFunc = func() error { return test.updateErr }
 			}
-			h := NewHandler(s, updateFunc)
+			h := NewHandler(s, nil, updateFunc)
 			r := chi.NewRouter()
 
 			r.Method(http.MethodPost, "/update/{metricsType}/{metricsName}/{metricsValue}", http.HandlerFunc(h.PostMetrics))
@@ -198,7 +194,7 @@ func TestPostMetrics(t *testing.T) {
 func TestMainPage(t *testing.T) {
 	t.Run("successfully renders html list", func(t *testing.T) {
 		mockStorage := &MockStorage{
-			OnGetAllMetrics: func() []models.Metrics {
+			OnGetAllMetrics: func(ctx context.Context) ([]models.Metrics, error) {
 				return []models.Metrics{
 					{
 						ID:    "Alloc",
@@ -210,10 +206,10 @@ func TestMainPage(t *testing.T) {
 						MType: models.Counter,
 						Delta: ptr(int64(5)),
 					},
-				}
+				}, nil
 			},
 		}
-		h := NewHandler(mockStorage, nil)
+		h := NewHandler(mockStorage, nil, nil)
 
 		req := httptest.NewRequest(http.MethodGet, "/", nil)
 		w := httptest.NewRecorder()
@@ -235,11 +231,11 @@ func TestMainPage(t *testing.T) {
 
 	t.Run("renders empty state message when no metrics exist", func(t *testing.T) {
 		mockStorage := &MockStorage{
-			OnGetAllMetrics: func() []models.Metrics {
-				return []models.Metrics{}
+			OnGetAllMetrics: func(ctx context.Context) ([]models.Metrics, error) {
+				return []models.Metrics{}, nil
 			},
 		}
-		h := NewHandler(mockStorage, nil)
+		h := NewHandler(mockStorage, nil, nil)
 
 		req := httptest.NewRequest(http.MethodGet, "/", nil)
 		w := httptest.NewRecorder()
@@ -255,7 +251,7 @@ func TestMetricsValue(t *testing.T) {
 	tests := []struct {
 		name         string
 		params       map[string]string
-		mockStorage  func() models.Storage
+		mockStorage  func() repository.Storage
 		expectedCode int
 		expectedBody string
 	}{
@@ -265,9 +261,9 @@ func TestMetricsValue(t *testing.T) {
 				"metricsType": "counter",
 				"metricsName": "PollCount",
 			},
-			mockStorage: func() models.Storage {
+			mockStorage: func() repository.Storage {
 				m := &MockStorage{}
-				m.OnGetMetrics = func(name, mtype string) (*models.Metrics, error) {
+				m.OnGetMetrics = func(ctx context.Context, name, mtype string) (*models.Metrics, error) {
 					return &models.Metrics{ID: "PollCount", MType: "counter", Delta: ptr(int64(45))}, nil
 				}
 				return m
@@ -281,9 +277,9 @@ func TestMetricsValue(t *testing.T) {
 				"metricsType": "gauge",
 				"metricsName": "Alloc",
 			},
-			mockStorage: func() models.Storage {
+			mockStorage: func() repository.Storage {
 				m := &MockStorage{}
-				m.OnGetMetrics = func(name, mtype string) (*models.Metrics, error) {
+				m.OnGetMetrics = func(ctx context.Context, name, mtype string) (*models.Metrics, error) {
 					return &models.Metrics{ID: "Alloc", MType: "gauge", Value: ptr(1234.56)}, nil
 				}
 				return m
@@ -297,9 +293,9 @@ func TestMetricsValue(t *testing.T) {
 				"metricsType": "gauge",
 				"metricsName": "NonExistent",
 			},
-			mockStorage: func() models.Storage {
+			mockStorage: func() repository.Storage {
 				m := &MockStorage{}
-				m.OnGetMetrics = func(name, mtype string) (*models.Metrics, error) {
+				m.OnGetMetrics = func(ctx context.Context, name, mtype string) (*models.Metrics, error) {
 					return nil, errors.New("not found")
 				}
 				return m
@@ -310,7 +306,7 @@ func TestMetricsValue(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			h := NewHandler(tt.mockStorage(), nil)
+			h := NewHandler(tt.mockStorage(), nil, nil)
 			req := newRequestWithChiParams(http.MethodGet, "/", tt.params)
 			w := httptest.NewRecorder()
 
@@ -373,12 +369,12 @@ func TestUpdateEndpoint(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			s := models.NewMemStorage()
+			s := repository.NewMemStorage()
 			var updateFunc func() error
 			if tt.updateErr != nil {
 				updateFunc = func() error { return tt.updateErr }
 			}
-			h := NewHandler(s, updateFunc)
+			h := NewHandler(s, nil, updateFunc)
 
 			req := httptest.NewRequest(http.MethodPost, "/update", strings.NewReader(tt.body))
 			if tt.contentType != "" {
@@ -393,12 +389,88 @@ func TestUpdateEndpoint(t *testing.T) {
 	}
 }
 
+func TestUpdatesEndpoint(t *testing.T) {
+	tests := []struct {
+		name         string
+		contentType  string
+		body         string
+		setupStorage func() repository.Storage
+		updateErr    error
+		wantStatus   int
+	}{
+		{
+			name:        "successfully process batch updates",
+			contentType: "application/json",
+			body:        `[{"id":"PollCount","type":"counter","delta":10}]`,
+			setupStorage: func() repository.Storage {
+				m := &MockStorage{}
+				m.OnSaveBatch = func(ctx context.Context, metrics []models.Metrics) error {
+					return nil
+				}
+				return m
+			},
+			wantStatus: http.StatusOK,
+		},
+		{
+			name:        "invalid content type returns bad request",
+			contentType: "text/plain",
+			body:        `[{"id":"PollCount","type":"counter","delta":10}]`,
+			setupStorage: func() repository.Storage {
+				return &MockStorage{}
+			},
+			wantStatus: http.StatusBadRequest,
+		},
+		{
+			name:        "validation error from storage returns bad request",
+			contentType: "application/json",
+			body:        `[{"id":"BadCounter","type":"counter"}]`,
+			setupStorage: func() repository.Storage {
+				m := &MockStorage{}
+				m.OnSaveBatch = func(ctx context.Context, metrics []models.Metrics) error {
+					return models.ErrDeltaIsNil
+				}
+				return m
+			},
+			wantStatus: http.StatusBadRequest,
+		},
+		{
+			name:        "storage internal error returns internal server error",
+			contentType: "application/json",
+			body:        `[{"id":"PollCount","type":"counter","delta":10}]`,
+			setupStorage: func() repository.Storage {
+				m := &MockStorage{}
+				m.OnSaveBatch = func(ctx context.Context, metrics []models.Metrics) error {
+					return errors.New("database connection lost")
+				}
+				return m
+			},
+			wantStatus: http.StatusInternalServerError,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h := NewHandler(tt.setupStorage(), nil, nil)
+
+			req := httptest.NewRequest(http.MethodPost, "/updates", strings.NewReader(tt.body))
+			if tt.contentType != "" {
+				req.Header.Set("Content-Type", tt.contentType)
+			}
+
+			w := httptest.NewRecorder()
+			h.UpdatesEndpoint(w, req)
+
+			assert.Equal(t, tt.wantStatus, w.Code)
+		})
+	}
+}
+
 func TestValueEndpoint(t *testing.T) {
 	tests := []struct {
 		name         string
 		contentType  string
 		body         string
-		setupStorage func() models.Storage
+		setupStorage func() repository.Storage
 		wantStatus   int
 		wantInBody   string
 	}{
@@ -406,9 +478,9 @@ func TestValueEndpoint(t *testing.T) {
 			name:        "successfully get counter value",
 			contentType: "application/json",
 			body:        `{"id": "PollCount", "type": "counter"}`,
-			setupStorage: func() models.Storage {
+			setupStorage: func() repository.Storage {
 				m := &MockStorage{}
-				m.OnGetMetrics = func(name, mtype string) (*models.Metrics, error) {
+				m.OnGetMetrics = func(ctx context.Context, name, mtype string) (*models.Metrics, error) {
 					return &models.Metrics{ID: "PollCount", MType: "counter", Delta: ptr(int64(42))}, nil
 				}
 				return m
@@ -420,9 +492,9 @@ func TestValueEndpoint(t *testing.T) {
 			name:        "successfully get gauge value",
 			contentType: "application/json",
 			body:        `{"id": "Alloc", "type": "gauge"}`,
-			setupStorage: func() models.Storage {
+			setupStorage: func() repository.Storage {
 				m := &MockStorage{}
-				m.OnGetMetrics = func(name, mtype string) (*models.Metrics, error) {
+				m.OnGetMetrics = func(ctx context.Context, name, mtype string) (*models.Metrics, error) {
 					return &models.Metrics{ID: "Alloc", MType: "gauge", Value: ptr(12.34)}, nil
 				}
 				return m
@@ -434,9 +506,9 @@ func TestValueEndpoint(t *testing.T) {
 			name:        "metric not found",
 			contentType: "application/json",
 			body:        `{"id": "Missing", "type": "gauge"}`,
-			setupStorage: func() models.Storage {
+			setupStorage: func() repository.Storage {
 				m := &MockStorage{}
-				m.OnGetMetrics = func(name, mtype string) (*models.Metrics, error) {
+				m.OnGetMetrics = func(ctx context.Context, name, mtype string) (*models.Metrics, error) {
 					return nil, errors.New("not found")
 				}
 				return m
@@ -447,7 +519,7 @@ func TestValueEndpoint(t *testing.T) {
 			name:        "incorrect content type",
 			contentType: "text/plain",
 			body:        `{"id": "Alloc", "type": "gauge"}`,
-			setupStorage: func() models.Storage {
+			setupStorage: func() repository.Storage {
 				return &MockStorage{}
 			},
 			wantStatus: http.StatusBadRequest,
@@ -456,9 +528,9 @@ func TestValueEndpoint(t *testing.T) {
 			name:        "type mismatch in found metric",
 			contentType: "application/json",
 			body:        `{"id": "Alloc", "type": "counter"}`, // requesting counter
-			setupStorage: func() models.Storage {
+			setupStorage: func() repository.Storage {
 				m := &MockStorage{}
-				m.OnGetMetrics = func(name, mtype string) (*models.Metrics, error) {
+				m.OnGetMetrics = func(ctx context.Context, name, mtype string) (*models.Metrics, error) {
 					return &models.Metrics{ID: "Alloc", MType: "gauge", Value: ptr(12.34)}, nil // returns gauge
 				}
 				return m
@@ -469,7 +541,7 @@ func TestValueEndpoint(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			h := NewHandler(tt.setupStorage(), nil)
+			h := NewHandler(tt.setupStorage(), nil, nil)
 
 			req := httptest.NewRequest(http.MethodPost, "/value", strings.NewReader(tt.body))
 			if tt.contentType != "" {
@@ -485,6 +557,63 @@ func TestValueEndpoint(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestAppHandler_PingEndpoint(t *testing.T) {
+	t.Run("returns 200 OK when database responds to ping", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		mockPinger := mock_handler.NewMockPinger(ctrl)
+
+		mockPinger.EXPECT().
+			PingContext(gomock.Any()).
+			Return(nil).
+			Times(1)
+
+		h := NewHandler(nil, mockPinger, nil)
+
+		req := httptest.NewRequest(http.MethodGet, "/ping", nil)
+		rec := httptest.NewRecorder()
+
+		h.PingEndpoint(rec, req)
+
+		assert.Equal(t, http.StatusOK, rec.Code)
+	})
+
+	t.Run("returns 500 Internal Server Error when database ping fails", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		mockPinger := mock_handler.NewMockPinger(ctrl)
+
+		mockPinger.EXPECT().
+			PingContext(gomock.Any()).
+			Return(errors.New("connection refused")).
+			Times(1)
+
+		h := NewHandler(nil, mockPinger, nil)
+
+		req := httptest.NewRequest(http.MethodGet, "/ping", nil)
+		rec := httptest.NewRecorder()
+
+		h.PingEndpoint(rec, req)
+
+		assert.Equal(t, http.StatusInternalServerError, rec.Code)
+		assert.Contains(t, rec.Body.String(), errDatabaseUnreachable.Error())
+	})
+
+	t.Run("returns 500 Internal Server Error when pinger is nil", func(t *testing.T) {
+		h := NewHandler(nil, nil, nil)
+
+		req := httptest.NewRequest(http.MethodGet, "/ping", nil)
+		rec := httptest.NewRecorder()
+
+		h.PingEndpoint(rec, req)
+
+		assert.Equal(t, http.StatusInternalServerError, rec.Code)
+		assert.Contains(t, rec.Body.String(), errNoDatabase.Error())
+	})
 }
 
 func TestProcessMetrics(t *testing.T) {
@@ -548,8 +677,8 @@ func TestProcessMetrics(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			s := models.NewMemStorage()
-			h := NewHandler(s, nil)
+			s := repository.NewMemStorage()
+			h := NewHandler(s, nil, nil)
 
 			err := h.processMetrics(tc.req)
 
@@ -559,7 +688,7 @@ func TestProcessMetrics(t *testing.T) {
 				assert.NoError(t, err)
 			}
 
-			metric, getErr := h.storage.GetMetrics(tc.expectedName, tc.expectedType)
+			metric, getErr := h.storage.GetMetrics(tc.req.Context(), tc.expectedName, tc.expectedType)
 			if tc.expectSaved {
 				require.NoError(t, getErr)
 				require.NotNil(t, metric)
@@ -651,151 +780,18 @@ func TestParseMetrics(t *testing.T) {
 	}
 }
 
-func TestParseUpdateMetrics(t *testing.T) {
-	tests := []struct {
-		name      string
-		input     *common.Metrics
-		expectErr bool
-		verify    func(t *testing.T, m *models.Metrics)
-	}{
-		{
-			name: "valid counter translation",
-			input: &common.Metrics{
-				ID:    "PollCount",
-				MType: "counter",
-				Delta: ptr(int64(5)),
-			},
-			expectErr: false,
-			verify: func(t *testing.T, m *models.Metrics) {
-				require.NotNil(t, m)
-				assert.Equal(t, "PollCount", m.ID)
-				assert.Equal(t, "counter", m.MType)
-				assert.Equal(t, int64(5), *m.Delta)
-			},
-		},
-		{
-			name: "valid gauge translation",
-			input: &common.Metrics{
-				ID:    "Alloc",
-				MType: "gauge",
-				Value: ptr(743.21),
-			},
-			expectErr: false,
-			verify: func(t *testing.T, m *models.Metrics) {
-				require.NotNil(t, m)
-				assert.Equal(t, "Alloc", m.ID)
-				assert.Equal(t, "gauge", m.MType)
-				assert.Equal(t, 743.21, *m.Value)
-			},
-		},
-		{
-			name: "empty metric id",
-			input: &common.Metrics{
-				MType: "counter",
-				Delta: ptr(int64(5)),
-			},
-			expectErr: true,
-		},
-		{
-			name: "missing counter delta",
-			input: &common.Metrics{
-				ID:    "PollCount",
-				MType: "counter",
-			},
-			expectErr: true,
-		},
-		{
-			name: "missing gauge value",
-			input: &common.Metrics{
-				ID:    "Alloc",
-				MType: "gauge",
-			},
-			expectErr: true,
-		},
-		{
-			name: "unknown metric type",
-			input: &common.Metrics{
-				ID:    "Alloc",
-				MType: "invalid-type",
-				Value: ptr(10.0),
-			},
-			expectErr: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			res, err := parseUpdateMetrics(tt.input)
-			if tt.expectErr {
-				assert.Error(t, err)
-			} else {
-				assert.NoError(t, err)
-				tt.verify(t, res)
-			}
-		})
-	}
-}
-
-func TestParseValueMetrics(t *testing.T) {
-	tests := []struct {
-		name      string
-		input     *common.Metrics
-		expectErr bool
-		wantID    string
-		wantType  string
-	}{
-		{
-			name:      "valid counter template retrieval",
-			input:     &common.Metrics{ID: "PollCount", MType: "counter"},
-			expectErr: false,
-			wantID:    "PollCount",
-			wantType:  "counter",
-		},
-		{
-			name:      "valid gauge template retrieval",
-			input:     &common.Metrics{ID: "Alloc", MType: "gauge"},
-			expectErr: false,
-			wantID:    "Alloc",
-			wantType:  "gauge",
-		},
-		{
-			name:      "missing metric id",
-			input:     &common.Metrics{MType: "counter"},
-			expectErr: true,
-		},
-		{
-			name:      "unknown metrics type value request",
-			input:     &common.Metrics{ID: "Alloc", MType: "unknown"},
-			expectErr: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			id, mtype, err := parseValueMetrics(tt.input)
-			if tt.expectErr {
-				assert.Error(t, err)
-			} else {
-				assert.NoError(t, err)
-				assert.Equal(t, tt.wantID, id)
-				assert.Equal(t, tt.wantType, mtype)
-			}
-		})
-	}
-}
-
 func TestDecodeJSONMetrics(t *testing.T) {
 	tests := []struct {
 		name      string
 		body      string
 		expectErr bool
-		verify    func(t *testing.T, m *common.Metrics)
+		verify    func(t *testing.T, m *models.Metrics)
 	}{
 		{
 			name:      "decode completely valid gauge struct",
 			body:      `{"id":"Alloc","type":"gauge","value":54.12}`,
 			expectErr: false,
-			verify: func(t *testing.T, m *common.Metrics) {
+			verify: func(t *testing.T, m *models.Metrics) {
 				require.NotNil(t, m)
 				assert.Equal(t, "Alloc", m.ID)
 				assert.Equal(t, "gauge", m.MType)
@@ -818,6 +814,54 @@ func TestDecodeJSONMetrics(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			req := httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString(tt.body))
 			res, err := decodeJSONMetrics(req)
+
+			if tt.expectErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				tt.verify(t, res)
+			}
+		})
+	}
+}
+
+func TestDecodeJSONBatch(t *testing.T) {
+	tests := []struct {
+		name      string
+		body      string
+		expectErr bool
+		verify    func(t *testing.T, metrics []models.Metrics)
+	}{
+		{
+			name:      "decode valid batch of metrics",
+			body:      `[{"id":"Alloc","type":"gauge","value":54.12},{"id":"PollCount","type":"counter","delta":5}]`,
+			expectErr: false,
+			verify: func(t *testing.T, metrics []models.Metrics) {
+				require.Len(t, metrics, 2)
+				assert.Equal(t, "Alloc", metrics[0].ID)
+				assert.Equal(t, models.Gauge, metrics[0].MType)
+				assert.Equal(t, 54.12, *metrics[0].Value)
+				assert.Equal(t, "PollCount", metrics[1].ID)
+				assert.Equal(t, models.Counter, metrics[1].MType)
+				assert.Equal(t, int64(5), *metrics[1].Delta)
+			},
+		},
+		{
+			name:      "reject batch with unknown fields due to strict decoding",
+			body:      `[{"id":"Alloc","type":"gauge","value":54.12,"extra":"field"}]`,
+			expectErr: true,
+		},
+		{
+			name:      "malformed json syntax error in batch",
+			body:      `[{"id":"Alloc",`,
+			expectErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString(tt.body))
+			res, err := decodeJSONBatch(req)
 
 			if tt.expectErr {
 				assert.Error(t, err)

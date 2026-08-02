@@ -1,13 +1,16 @@
-package model
+package repository
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"os"
 	"strings"
+
+	"github.com/paveltovchigrechko/metrics-service/internal/model"
 )
 
-// Idea: make this Storage interface. Server would work with disk only, verey slow and fun.
+// FileStorage represents a local stored JSON-file with metrics.
 type FileStorage struct {
 	path string
 }
@@ -26,12 +29,30 @@ func NewFileStorage(path string) (*FileStorage, error) {
 }
 
 func (fs *FileStorage) Load(storage Storage) error {
-	return RestoreMetrics(fs.path, storage)
+	bytes, err := os.ReadFile(fs.path)
+	if err != nil {
+		return err
+	}
+
+	metrics := make([]model.Metrics, 0)
+	err = json.Unmarshal(bytes, &metrics)
+	if err != nil {
+		return err
+	}
+
+	if err = storage.SaveBatch(context.Background(), metrics); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (fs *FileStorage) Save(storage Storage) error {
 	// extract metrics from storage
-	metrics := storage.GetAllMetrics()
+	metrics, err := storage.GetAllMetrics(context.Background())
+	if err != nil {
+		return err
+	}
 
 	// encode to JSON
 	encodedMetrics, err := json.Marshal(metrics)

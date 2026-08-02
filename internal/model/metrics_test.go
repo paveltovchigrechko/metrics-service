@@ -1,17 +1,11 @@
 package model
 
 import (
-	"encoding/json"
-	"errors"
-	"os"
-	"path/filepath"
 	"testing"
 
+	"github.com/paveltovchigrechko/metrics-service/internal/common"
 	"github.com/stretchr/testify/assert"
 )
-
-func int64Ptr(v int64) *int64       { return &v }
-func float64Ptr(v float64) *float64 { return &v }
 
 func TestCreateMetricsPositive(t *testing.T) {
 	positiveTestCases := []struct {
@@ -31,7 +25,7 @@ func TestCreateMetricsPositive(t *testing.T) {
 			expected: &Metrics{
 				ID:    "Some Counter",
 				MType: Counter,
-				Delta: int64Ptr(99),
+				Delta: common.Int64Ptr(99),
 				Value: nil,
 			},
 		},
@@ -45,7 +39,7 @@ func TestCreateMetricsPositive(t *testing.T) {
 				ID:    "Some Gauge",
 				MType: Gauge,
 				Delta: nil,
-				Value: float64Ptr(88.77),
+				Value: common.Float64Ptr(88.77),
 			},
 		},
 		{
@@ -57,7 +51,7 @@ func TestCreateMetricsPositive(t *testing.T) {
 			expected: &Metrics{
 				ID:    "Zero Counter",
 				MType: Counter,
-				Delta: int64Ptr(0),
+				Delta: common.Int64Ptr(0),
 			},
 		},
 		{
@@ -69,7 +63,7 @@ func TestCreateMetricsPositive(t *testing.T) {
 			expected: &Metrics{
 				ID:    "Zero Gauge",
 				MType: Gauge,
-				Value: float64Ptr(0),
+				Value: common.Float64Ptr(0),
 			},
 		},
 	}
@@ -137,94 +131,6 @@ func TestCreateMetricsNegative(t *testing.T) {
 
 			assert.Nil(t, result)
 			assert.ErrorIs(t, err, tc.expectedErr)
-		})
-	}
-}
-
-func TestRestoreMetrics(t *testing.T) {
-	testCounter := Metrics{
-		ID:    "PollCount",
-		MType: Counter,
-		Delta: int64Ptr(5),
-	}
-	testGauge := Metrics{
-		ID:    "Alloc",
-		MType: Gauge,
-		Value: float64Ptr(124.50),
-	}
-
-	validMetricsList := []Metrics{testCounter, testGauge}
-	validJSON, err := json.Marshal(validMetricsList)
-	assert.NoError(t, err)
-
-	type mockExpectation struct {
-		metric      *Metrics
-		returnError error
-	}
-
-	testCases := []struct {
-		name         string
-		fileContent  []byte
-		useWrongPath bool
-		mockReturns  []mockExpectation
-		expectedErr  string
-	}{
-		{
-			name:        "Successful restore of multiple metrics",
-			fileContent: validJSON,
-			mockReturns: []mockExpectation{
-				{metric: &testCounter, returnError: nil},
-				{metric: &testGauge, returnError: nil},
-			},
-			expectedErr: "",
-		},
-		{
-			name:         "File path does not exist",
-			useWrongPath: true,
-			expectedErr:  "no such file or directory",
-		},
-		{
-			name:        "Malformed or corrupt JSON payload",
-			fileContent: []byte(`[{"id": "PollCount", "type": "counter", "delta": "invalid_type"`),
-			expectedErr: "unexpected end of JSON",
-		},
-		{
-			name:        "Storage returns an error on save",
-			fileContent: validJSON,
-			mockReturns: []mockExpectation{
-				{metric: &testCounter, returnError: errors.New("database connection lost")},
-			},
-			expectedErr: "database connection lost",
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			tmpDir := t.TempDir()
-			filePath := filepath.Join(tmpDir, "metrics_backup.json")
-
-			if !tc.useWrongPath {
-				err := os.WriteFile(filePath, tc.fileContent, 0644)
-				assert.NoError(t, err)
-			} else {
-				filePath = filepath.Join(tmpDir, "non_existent_file.json")
-			}
-
-			mockStorage := new(MockStorage)
-			for _, exp := range tc.mockReturns {
-				mockStorage.On("RestoreMetrics", exp.metric).Return(exp.returnError).Once()
-			}
-
-			err := RestoreMetrics(filePath, mockStorage)
-
-			if tc.expectedErr != "" {
-				assert.Error(t, err)
-				assert.Contains(t, err.Error(), tc.expectedErr)
-			} else {
-				assert.NoError(t, err)
-			}
-
-			mockStorage.AssertExpectations(t)
 		})
 	}
 }
