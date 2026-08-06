@@ -16,6 +16,7 @@ func TestSetAgentConfig_Success(t *testing.T) {
 		wantAddr   string
 		wantReport time.Duration
 		wantPoll   time.Duration
+		wantKey    string
 	}{
 		{
 			name:       "Default values when no env or flags are set",
@@ -24,36 +25,41 @@ func TestSetAgentConfig_Success(t *testing.T) {
 			wantAddr:   "localhost:8080",
 			wantReport: 10 * time.Second,
 			wantPoll:   2 * time.Second,
+			wantKey:    "",
 		},
 		{
 			name:       "Flags are parsed correctly with no env present",
-			args:       []string{"-a", "127.0.0.1:9090", "-r", "30", "-p", "5"},
+			args:       []string{"-a", "127.0.0.1:9090", "-r", "30", "-p", "5", "-k", "key"},
 			envVars:    map[string]string{},
 			wantAddr:   "127.0.0.1:9090",
 			wantReport: 30 * time.Second,
 			wantPoll:   5 * time.Second,
+			wantKey:    "key",
 		},
 		{
 			name: "Env variables completely override flag configurations",
-			args: []string{"-a", "127.0.0.1:9090", "-r", "30", "-p", "5"},
+			args: []string{"-a", "127.0.0.1:9090", "-r", "30", "-p", "5", "-k", "key"},
 			envVars: map[string]string{
 				"ADDRESS":         "0.0.0.0:3000",
 				"REPORT_INTERVAL": "40",
 				"POLL_INTERVAL":   "10",
+				"KEY":             "env key",
 			},
 			wantAddr:   "0.0.0.0:3000",
 			wantReport: 40 * time.Second,
 			wantPoll:   10 * time.Second,
+			wantKey:    "env key",
 		},
 		{
 			name: "Partial Env overrides only address",
-			args: []string{"-a", "127.0.0.1:9090", "-r", "30", "-p", "5"},
+			args: []string{"-a", "127.0.0.1:9090", "-r", "30", "-p", "5", "-k", "key"},
 			envVars: map[string]string{
 				"ADDRESS": "0.0.0.0:3000",
 			},
 			wantAddr:   "0.0.0.0:3000",
 			wantReport: 30 * time.Second,
 			wantPoll:   5 * time.Second,
+			wantKey:    "key",
 		},
 	}
 
@@ -63,6 +69,7 @@ func TestSetAgentConfig_Success(t *testing.T) {
 			t.Setenv("ADDRESS", "")
 			t.Setenv("REPORT_INTERVAL", "")
 			t.Setenv("POLL_INTERVAL", "")
+			t.Setenv("KEY", "")
 
 			for k, v := range tc.envVars {
 				t.Setenv(k, v)
@@ -117,7 +124,7 @@ func TestSetAgentConfig_Failures(t *testing.T) {
 
 func TestCreateAgentFlagConfig(t *testing.T) {
 	t.Run("should correctly parse flag options into agent config struct", func(t *testing.T) {
-		args := []string{"-a", "10.0.0.1:1337", "-r", "60", "-p", "12"}
+		args := []string{"-a", "10.0.0.1:1337", "-r", "60", "-p", "12", "-k", "key"}
 		cfg, err := createAgentFlagConfig(args)
 
 		require.NoError(t, err)
@@ -125,6 +132,7 @@ func TestCreateAgentFlagConfig(t *testing.T) {
 		assert.Equal(t, "10.0.0.1:1337", cfg.ServerAddress)
 		assert.Equal(t, 60*time.Second, cfg.ReportInterval)
 		assert.Equal(t, 12*time.Second, cfg.PollInterval)
+		assert.Equal(t, "key", cfg.Key)
 	})
 }
 
@@ -133,6 +141,7 @@ func TestCreateAgentEnvConfig(t *testing.T) {
 		t.Setenv("ADDRESS", "192.168.1.1:80")
 		t.Setenv("REPORT_INTERVAL", "15")
 		t.Setenv("POLL_INTERVAL", "3")
+		t.Setenv("KEY", "env key")
 
 		envCfg, err := createAgentEnvConfig()
 		require.NoError(t, err)
@@ -141,12 +150,14 @@ func TestCreateAgentEnvConfig(t *testing.T) {
 		assert.Equal(t, "192.168.1.1:80", *envCfg.ServerAddress)
 		assert.Equal(t, 15, *envCfg.ReportInterval)
 		assert.Equal(t, 3, *envCfg.PollInterval)
+		assert.Equal(t, "env key", *envCfg.Key)
 	})
 
 	t.Run("avoids pointer dereferences on empty environment (returns nils)", func(t *testing.T) {
 		t.Setenv("ADDRESS", "")
 		t.Setenv("REPORT_INTERVAL", "")
 		t.Setenv("POLL_INTERVAL", "")
+		t.Setenv("KEY", "")
 
 		envCfg, err := createAgentEnvConfig()
 		require.NoError(t, err)
@@ -155,6 +166,7 @@ func TestCreateAgentEnvConfig(t *testing.T) {
 		assert.Nil(t, envCfg.ServerAddress)
 		assert.Nil(t, envCfg.ReportInterval)
 		assert.Nil(t, envCfg.PollInterval)
+		assert.Nil(t, envCfg.Key)
 	})
 }
 
@@ -167,12 +179,14 @@ func TestMergeAgentConfigs(t *testing.T) {
 			ServerAddress:  "flag:80",
 			ReportInterval: 5 * time.Second,
 			PollInterval:   1 * time.Second,
+			Key:            "key",
 		}
 
 		envCfg := &envAgentConfig{
 			ServerAddress:  strPtr("env:80"),
 			ReportInterval: intPtr(100),
 			PollInterval:   intPtr(20),
+			Key:            strPtr("env key"),
 		}
 
 		merged := mergeAgentConfigs(envCfg, flagCfg)
@@ -180,5 +194,6 @@ func TestMergeAgentConfigs(t *testing.T) {
 		assert.Equal(t, "env:80", merged.ServerAddress)
 		assert.Equal(t, 100*time.Second, merged.ReportInterval)
 		assert.Equal(t, 20*time.Second, merged.PollInterval)
+		assert.Equal(t, "env key", merged.Key)
 	})
 }

@@ -13,21 +13,26 @@ type AgentConfig struct {
 	ServerAddress  string
 	ReportInterval time.Duration
 	PollInterval   time.Duration
+	Key            string
 }
 
 type envAgentConfig struct {
 	ServerAddress  *string `env:"ADDRESS"`
 	ReportInterval *int    `env:"REPORT_INTERVAL"`
 	PollInterval   *int    `env:"POLL_INTERVAL"`
+	Key            *string `env:"KEY"`
 }
 
 const (
-	servAddressFlag       = "a"
-	reportIntervalFlag    = "r"
-	pollIntervalFlag      = "p"
+	servAddressFlag    = "a"
+	reportIntervalFlag = "r"
+	pollIntervalFlag   = "p"
+	keyFlag            = "k"
+
 	defaultServerAddress  = "localhost:8080"
 	defaultReportInterval = 10
 	defaultPollInterval   = 2
+	defaultKey            = ""
 )
 
 var errIncorrectInterval = errors.New("interval must be positive") // Make this error more descriptive: add flag and value that caused it.
@@ -70,6 +75,11 @@ func mergeAgentConfigs(envCfg *envAgentConfig, flagCfg *AgentConfig) *AgentConfi
 		flagCfg.PollInterval = pollIntervalSeconds
 	}
 
+	// Set key
+	if envCfg.Key != nil {
+		flagCfg.Key = *envCfg.Key
+	}
+
 	return flagCfg
 }
 
@@ -79,6 +89,7 @@ func createAgentFlagConfig(args []string) (*AgentConfig, error) {
 	address := fs.String(servAddressFlag, defaultServerAddress, "Metrics server HTTP address")
 	reportSeconds := fs.Int(reportIntervalFlag, defaultReportInterval, "Metrics report frequency (seconds)")
 	pollSeconds := fs.Int(pollIntervalFlag, defaultPollInterval, "Metrics update frequency (seconds)")
+	key := fs.String(keyFlag, defaultKey, "Encrypting key")
 
 	err := fs.Parse(args)
 	if err != nil {
@@ -92,6 +103,7 @@ func createAgentFlagConfig(args []string) (*AgentConfig, error) {
 		ServerAddress:  *address,
 		ReportInterval: reportInterval,
 		PollInterval:   pollInterval,
+		Key:            *key,
 	}, nil
 }
 

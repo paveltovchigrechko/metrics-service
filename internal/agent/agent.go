@@ -13,6 +13,7 @@ import (
 
 	"github.com/go-resty/resty/v2"
 	"github.com/paveltovchigrechko/metrics-service/internal/config"
+	"github.com/paveltovchigrechko/metrics-service/internal/hashing"
 	models "github.com/paveltovchigrechko/metrics-service/internal/model"
 )
 
@@ -368,7 +369,7 @@ func (a *Agent) sendMetricsURL(metrics []*models.Metrics) error {
 		}
 
 	}
-	// Should we reset a.PollCount here?
+
 	return nil
 }
 
@@ -377,20 +378,17 @@ func (a *Agent) sendMetricsJSON(metrics []*models.Metrics, gzipCompressed bool) 
 		return nil
 	}
 
-	url := fmt.Sprintf("http://%s/updates", a.cfg.ServerAddress)
+	rawJSON, err := json.Marshal(metrics)
+	if err != nil {
+		return err
+	}
 
-	var payload interface{} = metrics
-	var err error
+	payload := rawJSON
 
 	req := a.client.R().
 		SetHeader("Content-Type", applicationJSON)
 
 	if gzipCompressed {
-		rawJSON, err := json.Marshal(metrics)
-		if err != nil {
-			return err
-		}
-
 		compressedBytes, err := gzipCompressJSON(rawJSON)
 		if err != nil {
 			return err
@@ -400,6 +398,14 @@ func (a *Agent) sendMetricsJSON(metrics []*models.Metrics, gzipCompressed bool) 
 		payload = compressedBytes
 	}
 
+	// check if we need hashing
+	if a.cfg.Key != "" {
+		key := []byte(a.cfg.Key)
+		encodedSign := hashing.Calculate(payload, key)
+		req.SetHeader("HashSHA256", encodedSign)
+	}
+
+	url := fmt.Sprintf("http://%s/updates", a.cfg.ServerAddress)
 	resp, err := req.SetBody(payload).Post(url)
 
 	if err != nil {
