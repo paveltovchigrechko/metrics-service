@@ -29,7 +29,12 @@ func run() error {
 	}
 	defer l.Sync() // Flush at the end
 
-	serv, err := server.New(cfg, logger.LoggerMiddleware(l), middleware.GZIPMiddleware)
+	serv, err := server.New(cfg,
+		logger.LoggerMiddleware(l),
+		middleware.VerifyHashMiddleware(cfg.Key),
+		middleware.SignResponseMiddleware(cfg.Key),
+		middleware.GZIPMiddleware,
+	)
 	if err != nil {
 		return err
 	}

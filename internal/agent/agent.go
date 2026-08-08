@@ -3,6 +3,7 @@ package agent
 import (
 	"bytes"
 	"compress/gzip"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -401,7 +402,8 @@ func (a *Agent) sendMetricsJSON(metrics []*models.Metrics, gzipCompressed bool) 
 	// check if we need hashing
 	if a.cfg.Key != "" {
 		key := []byte(a.cfg.Key)
-		encodedSign := hashing.Calculate(payload, key)
+		sign := hashing.Calculate(payload, key)
+		encodedSign := hex.EncodeToString(sign)
 		req.SetHeader("HashSHA256", encodedSign)
 	}
 
