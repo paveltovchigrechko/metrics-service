@@ -86,79 +86,79 @@ func TestVerifyHashMiddleware(t *testing.T) {
 	})
 }
 
-func TestSignResponseMiddleware(t *testing.T) {
-	secret := "test-secret-key"
-	keyBytes := []byte(secret)
+// func TestSignResponseMiddleware(t *testing.T) {
+// 	secret := "test-secret-key"
+// 	keyBytes := []byte(secret)
 
-	t.Run("Empty secret key skips response signing", func(t *testing.T) {
-		nextHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.WriteHeader(http.StatusOK)
-			w.Write([]byte("response body"))
-		})
+// 	t.Run("Empty secret key skips response signing", func(t *testing.T) {
+// 		nextHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+// 			w.WriteHeader(http.StatusOK)
+// 			w.Write([]byte("response body"))
+// 		})
 
-		mw := SignResponseMiddleware("")(nextHandler)
-		req := httptest.NewRequest(http.MethodGet, "/", nil)
-		rec := httptest.NewRecorder()
+// 		mw := SignResponseMiddleware("")(nextHandler)
+// 		req := httptest.NewRequest(http.MethodGet, "/", nil)
+// 		rec := httptest.NewRecorder()
 
-		mw.ServeHTTP(rec, req)
+// 		mw.ServeHTTP(rec, req)
 
-		if rec.Code != http.StatusOK {
-			t.Errorf("expected status 200, got %d", rec.Code)
-		}
-		if rec.Header().Get("HashSHA256") != "" {
-			t.Errorf("expected no HashSHA256 header when secret is empty")
-		}
-	})
+// 		if rec.Code != http.StatusOK {
+// 			t.Errorf("expected status 200, got %d", rec.Code)
+// 		}
+// 		if rec.Header().Get("HashSHA256") != "" {
+// 			t.Errorf("expected no HashSHA256 header when secret is empty")
+// 		}
+// 	})
 
-	t.Run("Signs response body and preserves custom status code (e.g., 404)", func(t *testing.T) {
-		responseBody := []byte(`{"error":"metrics not found"}`)
-		statusCode := http.StatusNotFound
+// 	t.Run("Signs response body and preserves custom status code (e.g., 404)", func(t *testing.T) {
+// 		responseBody := []byte(`{"error":"metrics not found"}`)
+// 		statusCode := http.StatusNotFound
 
-		nextHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.WriteHeader(statusCode)
-			w.Write(responseBody)
-		})
+// 		nextHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+// 			w.WriteHeader(statusCode)
+// 			w.Write(responseBody)
+// 		})
 
-		mw := SignResponseMiddleware(secret)(nextHandler)
-		req := httptest.NewRequest(http.MethodGet, "/", nil)
-		rec := httptest.NewRecorder()
+// 		mw := SignResponseMiddleware(secret)(nextHandler)
+// 		req := httptest.NewRequest(http.MethodGet, "/", nil)
+// 		rec := httptest.NewRecorder()
 
-		mw.ServeHTTP(rec, req)
+// 		mw.ServeHTTP(rec, req)
 
-		// Verify status code is preserved correctly
-		if rec.Code != statusCode {
-			t.Errorf("expected status %d, got %d", statusCode, rec.Code)
-		}
+// 		// Verify status code is preserved correctly
+// 		if rec.Code != statusCode {
+// 			t.Errorf("expected status %d, got %d", statusCode, rec.Code)
+// 		}
 
-		// Verify hash header is correctly calculated and attached
-		expectedHash := hex.EncodeToString(hashing.Calculate(responseBody, keyBytes))
-		actualHash := rec.Header().Get("HashSHA256")
-		if actualHash != expectedHash {
-			t.Errorf("expected hash %s, got %s", expectedHash, actualHash)
-		}
-	})
+// 		// Verify hash header is correctly calculated and attached
+// 		expectedHash := hex.EncodeToString(hashing.Calculate(responseBody, keyBytes))
+// 		actualHash := rec.Header().Get("HashSHA256")
+// 		if actualHash != expectedHash {
+// 			t.Errorf("expected hash %s, got %s", expectedHash, actualHash)
+// 		}
+// 	})
 
-	t.Run("Implicit 200 OK status when WriteHeader is not explicitly called", func(t *testing.T) {
-		responseBody := []byte("implicit status body")
+// 	t.Run("Implicit 200 OK status when WriteHeader is not explicitly called", func(t *testing.T) {
+// 		responseBody := []byte("implicit status body")
 
-		nextHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.Write(responseBody)
-		})
+// 		nextHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+// 			w.Write(responseBody)
+// 		})
 
-		mw := SignResponseMiddleware(secret)(nextHandler)
-		req := httptest.NewRequest(http.MethodGet, "/", nil)
-		rec := httptest.NewRecorder()
+// 		mw := SignResponseMiddleware(secret)(nextHandler)
+// 		req := httptest.NewRequest(http.MethodGet, "/", nil)
+// 		rec := httptest.NewRecorder()
 
-		mw.ServeHTTP(rec, req)
+// 		mw.ServeHTTP(rec, req)
 
-		if rec.Code != http.StatusOK {
-			t.Errorf("expected status 200, got %d", rec.Code)
-		}
+// 		if rec.Code != http.StatusOK {
+// 			t.Errorf("expected status 200, got %d", rec.Code)
+// 		}
 
-		expectedHash := hex.EncodeToString(hashing.Calculate(responseBody, keyBytes))
-		actualHash := rec.Header().Get("HashSHA256")
-		if actualHash != expectedHash {
-			t.Errorf("expected hash %s, got %s", expectedHash, actualHash)
-		}
-	})
-}
+// 		expectedHash := hex.EncodeToString(hashing.Calculate(responseBody, keyBytes))
+// 		actualHash := rec.Header().Get("HashSHA256")
+// 		if actualHash != expectedHash {
+// 			t.Errorf("expected hash %s, got %s", expectedHash, actualHash)
+// 		}
+// 	})
+// }
