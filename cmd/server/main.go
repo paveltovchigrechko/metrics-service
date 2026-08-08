@@ -32,7 +32,7 @@ func run() error {
 	serv, err := server.New(cfg,
 		logger.LoggerMiddleware(l),
 		middleware.VerifyHashMiddleware(cfg.Key),
-		middleware.SignResponseMiddleware(cfg.Key),
+		// middleware.SignResponseMiddleware(cfg.Key),
 		middleware.GZIPMiddleware,
 	)
 	if err != nil {

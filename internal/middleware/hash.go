@@ -8,12 +8,11 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/paveltovchigrechko/metrics-service/internal/handler"
 	"github.com/paveltovchigrechko/metrics-service/internal/hashing"
 )
 
 var (
-	ErrMissingHash  = errors.New("HashSHA256 header contains no hash")
+	// ErrMissingHash  = errors.New("HashSHA256 header contains no hash")
 	ErrHashMismatch = errors.New("header hash does not match body hash")
 )
 
@@ -53,20 +52,19 @@ func VerifyHashMiddleware(secretKey string) func(http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			hashHeader := r.Header.Get("HashSHA256")
 			if hashHeader == "" {
-				// Coupling with handler package essentially is not the best idea.
-				handler.WriteError(w, ErrMissingHash, http.StatusBadRequest)
+				next.ServeHTTP(w, r)
 				return
 			}
 
 			receivedHash, err := hex.DecodeString(hashHeader)
 			if err != nil {
-				handler.WriteError(w, err, http.StatusBadRequest)
+				http.Error(w, err.Error(), http.StatusBadRequest)
 				return
 			}
 
 			body, err := io.ReadAll(r.Body) // Consumes the body
 			if err != nil {
-				handler.WriteError(w, err, http.StatusBadRequest)
+				http.Error(w, err.Error(), http.StatusBadRequest)
 				return
 			}
 			// Restore the body
@@ -74,7 +72,7 @@ func VerifyHashMiddleware(secretKey string) func(http.Handler) http.Handler {
 
 			expectedHash := hashing.Calculate(body, keyBytes)
 			if !hmac.Equal(receivedHash, expectedHash) {
-				handler.WriteError(w, ErrHashMismatch, http.StatusBadRequest)
+				http.Error(w, ErrHashMismatch.Error(), http.StatusBadRequest)
 				return
 			}
 
