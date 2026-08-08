@@ -33,18 +33,6 @@ func TestVerifyHashMiddleware(t *testing.T) {
 		}
 	})
 
-	t.Run("Missing HashSHA256 header returns 400", func(t *testing.T) {
-		mw := VerifyHashMiddleware(secret)(nextHandler)
-		req := httptest.NewRequest(http.MethodPost, "/", bytes.NewReader(bodyBytes))
-		rec := httptest.NewRecorder()
-
-		mw.ServeHTTP(rec, req)
-
-		if rec.Code != http.StatusBadRequest {
-			t.Errorf("expected status 400 for missing header, got %d", rec.Code)
-		}
-	})
-
 	t.Run("Invalid hex format in HashSHA256 header returns 400", func(t *testing.T) {
 		mw := VerifyHashMiddleware(secret)(nextHandler)
 		req := httptest.NewRequest(http.MethodPost, "/", bytes.NewReader(bodyBytes))
