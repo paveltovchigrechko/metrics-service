@@ -14,6 +14,7 @@ type AgentConfig struct {
 	ReportInterval time.Duration
 	PollInterval   time.Duration
 	Key            string
+	RateLimit      int
 }
 
 type envAgentConfig struct {
@@ -21,6 +22,7 @@ type envAgentConfig struct {
 	ReportInterval *int    `env:"REPORT_INTERVAL"`
 	PollInterval   *int    `env:"POLL_INTERVAL"`
 	Key            *string `env:"KEY"`
+	RateLimit      *int    `env:"RATE_LIMIT"`
 }
 
 const (
@@ -28,14 +30,19 @@ const (
 	reportIntervalFlag = "r"
 	pollIntervalFlag   = "p"
 	keyFlag            = "k"
+	rateLimitFlag      = "l"
 
 	defaultServerAddress  = "localhost:8080"
 	defaultReportInterval = 10
 	defaultPollInterval   = 2
 	defaultKey            = ""
+	defaultRateLimit      = 2
 )
 
-var errIncorrectInterval = errors.New("interval must be positive") // Make this error more descriptive: add flag and value that caused it.
+var (
+	errIncorrectInterval = errors.New("interval must be positive")
+	errRateLimitNegative = errors.New("rate limit must be positive")
+)
 
 func SetAgentConfig(args []string) (*AgentConfig, error) {
 	envCfg, err := createAgentEnvConfig()
@@ -52,6 +59,10 @@ func SetAgentConfig(args []string) (*AgentConfig, error) {
 
 	if err := validateIntervals(cfg.PollInterval, cfg.ReportInterval); err != nil {
 		return nil, err
+	}
+
+	if cfg.RateLimit <= 0 {
+		return nil, errRateLimitNegative
 	}
 
 	return cfg, nil
@@ -80,6 +91,11 @@ func mergeAgentConfigs(envCfg *envAgentConfig, flagCfg *AgentConfig) *AgentConfi
 		flagCfg.Key = *envCfg.Key
 	}
 
+	// set rate
+	if envCfg.RateLimit != nil {
+		flagCfg.RateLimit = *envCfg.RateLimit
+	}
+
 	return flagCfg
 }
 
@@ -90,6 +106,7 @@ func createAgentFlagConfig(args []string) (*AgentConfig, error) {
 	reportSeconds := fs.Int(reportIntervalFlag, defaultReportInterval, "Metrics report frequency (seconds)")
 	pollSeconds := fs.Int(pollIntervalFlag, defaultPollInterval, "Metrics update frequency (seconds)")
 	key := fs.String(keyFlag, defaultKey, "Encrypting key")
+	rateLimit := fs.Int(rateLimitFlag, defaultRateLimit, "Number of concurrent requests")
 
 	err := fs.Parse(args)
 	if err != nil {
@@ -104,6 +121,7 @@ func createAgentFlagConfig(args []string) (*AgentConfig, error) {
 		ReportInterval: reportInterval,
 		PollInterval:   pollInterval,
 		Key:            *key,
+		RateLimit:      *rateLimit,
 	}, nil
 }
 
@@ -116,7 +134,7 @@ func createAgentEnvConfig() (*envAgentConfig, error) {
 		return nil, err
 	}
 
-	// Treat empty environment variables as error
+	// Treat empty string environment variables as error
 	if envCfg.ServerAddress != nil && strings.Trim(*envCfg.ServerAddress, " ") == "" {
 		return nil, errEmptyServerAddress
 	}

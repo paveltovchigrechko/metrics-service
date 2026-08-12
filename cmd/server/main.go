@@ -31,7 +31,7 @@ func run() error {
 
 	serv, err := server.New(cfg,
 		logger.LoggerMiddleware(l),
-		middleware.VerifyHashMiddleware(cfg.Key),
+		middleware.VerifyHashMiddleware(cfg.Key), // I can make these middlewares conditional on cfg.Key != "". Should I?
 		middleware.SignResponseMiddleware(cfg.Key),
 		middleware.GZIPMiddleware,
 	)
