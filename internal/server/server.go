@@ -82,7 +82,7 @@ func New(c *config.ServerConfig, middlewares ...func(http.Handler) http.Handler)
 	}
 
 	var pinger handler.Pinger
-	if database != nil { //Should I check here for type == PostgresStorage and create pinger from ps.db?
+	if database != nil {
 		pinger = database
 	}
 

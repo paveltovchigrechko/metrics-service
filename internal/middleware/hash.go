@@ -12,7 +12,6 @@ import (
 )
 
 var (
-	// ErrMissingHash  = errors.New("HashSHA256 header contains no hash")
 	ErrHashMismatch = errors.New("header hash does not match body hash")
 )
 
