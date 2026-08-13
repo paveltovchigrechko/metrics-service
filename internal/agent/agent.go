@@ -10,12 +10,16 @@ import (
 	"math"
 	"math/rand"
 	"runtime"
+	"sync"
 	"time"
 
 	"github.com/go-resty/resty/v2"
 	"github.com/paveltovchigrechko/metrics-service/internal/config"
 	"github.com/paveltovchigrechko/metrics-service/internal/hashing"
+	"github.com/paveltovchigrechko/metrics-service/internal/model"
 	models "github.com/paveltovchigrechko/metrics-service/internal/model"
+	"github.com/shirou/gopsutil/v4/cpu"
+	"github.com/shirou/gopsutil/v4/mem"
 )
 
 const (
@@ -29,6 +33,7 @@ type Agent struct {
 	m      *runtime.MemStats
 	client *resty.Client
 	cfg    *config.AgentConfig
+	mu     sync.Mutex
 
 	Alloc         uint64
 	BuckHashSys   uint64
@@ -60,6 +65,10 @@ type Agent struct {
 
 	PollCount   int64
 	RandomValue float64
+
+	TotalMemory     float64
+	FreeMemory      float64
+	CPUUtilizations []float64 // should be a slice with len == CPU number in runtime
 }
 
 func NewAgent(cfg *config.AgentConfig) *Agent {
@@ -88,26 +97,48 @@ func NewAgent(cfg *config.AgentConfig) *Agent {
 }
 
 func (a *Agent) Run() {
-	// time.Ticker was suggested by AI
-	pollTicker := time.NewTicker(a.cfg.PollInterval)
-	reportTicker := time.NewTicker(a.cfg.ReportInterval)
+	go a.startPolling(a.cfg.PollInterval)
+	a.startReporting(a.cfg.ReportInterval, a.cfg.RateLimit)
+}
 
-	for {
-		select {
-		case <-pollTicker.C:
-			runtime.ReadMemStats(a.m)
-			a.updateMetrics()
-		case <-reportTicker.C:
-			metrics := a.buildMetrics()
-			err := a.sendMetricsJSON(metrics, true)
-			if err != nil {
-				log.Print(err)
-			}
+func (a *Agent) startPolling(interval time.Duration) {
+	ticker := time.NewTicker(interval)
+	for range ticker.C {
+		runtime.ReadMemStats(a.m)
+		a.updateMetrics()
+
+		if err := a.updatePSUMetrics(); err != nil {
+			log.Print("failed to fetch PSU metrics: ", err)
 		}
 	}
 }
 
+func (a *Agent) startReporting(interval time.Duration, maxConcurrency int) {
+	ticker := time.NewTicker(interval)
+	sem := make(chan struct{}, maxConcurrency)
+
+	for range ticker.C {
+		a.mu.Lock()
+		metrics := a.buildMetrics()
+		a.mu.Unlock()
+
+		go func(m []*models.Metrics) {
+			// Acquire token (blocks if maxConcurrency requests are already in flight)
+			sem <- struct{}{}
+			defer func() { <-sem }() // Release token when done
+
+			err := a.sendMetricsJSON(m, true)
+			if err != nil {
+				log.Print("failed to send metrics: ", err)
+			}
+		}(metrics)
+	}
+}
+
 func (a *Agent) updateMetrics() {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
 	// Use reflect to copy values?
 	a.Alloc = a.m.Alloc
 	a.BuckHashSys = a.m.BuckHashSys
@@ -139,6 +170,27 @@ func (a *Agent) updateMetrics() {
 
 	a.PollCount++
 	a.RandomValue = calcNewRandomValue()
+}
+
+func (a *Agent) updatePSUMetrics() error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	v, err := mem.VirtualMemory()
+	if err != nil {
+		return err
+	}
+
+	a.TotalMemory = float64(v.Total)
+	a.FreeMemory = float64(v.Free)
+	cpuPercentages, err := cpu.Percent(0, true)
+	if err != nil {
+		return err
+	}
+
+	a.CPUUtilizations = cpuPercentages
+
+	return nil
 }
 
 type MetricDescriptor struct {
@@ -347,15 +399,39 @@ var metricsRegistry = []MetricDescriptor{
 			return m
 		},
 	},
+	{
+		Get: func(a *Agent) *models.Metrics {
+			m, _ := models.CreateMetrics("TotalMemory", models.Gauge, 0, a.TotalMemory)
+			return m
+		},
+	},
+	{
+		Get: func(a *Agent) *models.Metrics {
+			m, _ := models.CreateMetrics("FreeMemory", models.Gauge, 0, a.FreeMemory)
+			return m
+		},
+	},
 }
 
 func (a *Agent) buildMetrics() []*models.Metrics {
-	result := make([]*models.Metrics, 0, len(metricsRegistry))
+	result := make([]*models.Metrics, 0, len(metricsRegistry)+len(a.CPUUtilizations))
 
+	a.mu.Lock()
 	for _, md := range metricsRegistry {
 		m := md.Get(a)
 		result = append(result, m)
 	}
+
+	for i, val := range a.CPUUtilizations {
+		coreVal := val
+		metricName := fmt.Sprintf("CPUutilization%d", i+1)
+		result = append(result, &model.Metrics{
+			ID:    metricName,
+			MType: model.Gauge,
+			Value: &coreVal,
+		})
+	}
+	a.mu.Unlock()
 	return result
 }
 
