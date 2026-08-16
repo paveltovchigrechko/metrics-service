@@ -3,6 +3,7 @@ package agent
 import (
 	"bytes"
 	"compress/gzip"
+	"context"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -35,6 +36,7 @@ type Agent struct {
 	cfg    *config.AgentConfig
 	mu     sync.Mutex
 
+	// Runtime metrics
 	Alloc         uint64
 	BuckHashSys   uint64
 	Frees         uint64
@@ -66,9 +68,10 @@ type Agent struct {
 	PollCount   int64
 	RandomValue float64
 
+	// Metrics from gopsutil
 	TotalMemory     float64
 	FreeMemory      float64
-	CPUUtilizations []float64 // should be a slice with len == CPU number in runtime
+	CPUUtilizations []float64
 }
 
 func NewAgent(cfg *config.AgentConfig) *Agent {
@@ -96,42 +99,83 @@ func NewAgent(cfg *config.AgentConfig) *Agent {
 	}
 }
 
-func (a *Agent) Run() {
-	go a.startPolling(a.cfg.PollInterval)
-	a.startReporting(a.cfg.ReportInterval, a.cfg.RateLimit)
+func (a *Agent) Run(ctx context.Context) {
+	metricsChan := make(chan []model.Metrics, a.cfg.RateLimit*2)
+
+	for i := 0; i < a.cfg.RateLimit; i++ {
+		// RateLimit goroutines that read channel with metrics and send them.
+		go func() {
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case metrics, ok := <-metricsChan:
+					if !ok {
+						return
+					}
+					if err := a.sendMetricsJSON(metrics, true); err != nil {
+						log.Printf("failed to send metrics: %v", err)
+					}
+				}
+			}
+		}()
+	}
+
+	// Separate goroutines for runtime and PSU metrics and reporting.
+	go a.collectRuntimeMetrics(ctx, a.cfg.PollInterval)
+	go a.collectPSUMetrics(ctx, a.cfg.PollInterval)
+	go a.startReporting(ctx, a.cfg.ReportInterval, metricsChan)
+	<-ctx.Done()
 }
 
-func (a *Agent) startPolling(interval time.Duration) {
+func (a *Agent) collectRuntimeMetrics(ctx context.Context, interval time.Duration) {
 	ticker := time.NewTicker(interval)
-	for range ticker.C {
-		runtime.ReadMemStats(a.m)
-		a.updateMetrics()
+	defer ticker.Stop()
 
-		if err := a.updatePSUMetrics(); err != nil {
-			log.Print("failed to fetch PSU metrics: ", err)
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			runtime.ReadMemStats(a.m)
+			a.updateMetrics()
 		}
 	}
 }
 
-func (a *Agent) startReporting(interval time.Duration, maxConcurrency int) {
+func (a *Agent) collectPSUMetrics(ctx context.Context, interval time.Duration) {
 	ticker := time.NewTicker(interval)
-	sem := make(chan struct{}, maxConcurrency)
+	defer ticker.Stop()
 
-	for range ticker.C {
-		a.mu.Lock()
-		metrics := a.buildMetrics()
-		a.mu.Unlock()
-
-		go func(m []*models.Metrics) {
-			// Acquire token (blocks if maxConcurrency requests are already in flight)
-			sem <- struct{}{}
-			defer func() { <-sem }() // Release token when done
-
-			err := a.sendMetricsJSON(m, true)
-			if err != nil {
-				log.Print("failed to send metrics: ", err)
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			if err := a.updatePSUMetrics(); err != nil {
+				log.Print("failed to fetch PSU metrics: ", err)
 			}
-		}(metrics)
+		}
+	}
+}
+
+func (a *Agent) startReporting(ctx context.Context, interval time.Duration, metricsChan chan<- []model.Metrics) {
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			metrics := a.buildMetrics()
+
+			select {
+			case metricsChan <- metrics:
+			case <-ctx.Done():
+				return
+			}
+		}
 	}
 }
 
@@ -173,13 +217,13 @@ func (a *Agent) updateMetrics() {
 }
 
 func (a *Agent) updatePSUMetrics() error {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-
 	v, err := mem.VirtualMemory()
 	if err != nil {
 		return err
 	}
+
+	a.mu.Lock()
+	defer a.mu.Unlock()
 
 	a.TotalMemory = float64(v.Total)
 	a.FreeMemory = float64(v.Free)
@@ -413,19 +457,19 @@ var metricsRegistry = []MetricDescriptor{
 	},
 }
 
-func (a *Agent) buildMetrics() []*models.Metrics {
-	result := make([]*models.Metrics, 0, len(metricsRegistry)+len(a.CPUUtilizations))
+func (a *Agent) buildMetrics() []models.Metrics {
+	result := make([]models.Metrics, 0, len(metricsRegistry)+len(a.CPUUtilizations))
 
 	a.mu.Lock()
 	for _, md := range metricsRegistry {
 		m := md.Get(a)
-		result = append(result, m)
+		result = append(result, *m)
 	}
 
 	for i, val := range a.CPUUtilizations {
 		coreVal := val
 		metricName := fmt.Sprintf("CPUutilization%d", i+1)
-		result = append(result, &model.Metrics{
+		result = append(result, model.Metrics{
 			ID:    metricName,
 			MType: model.Gauge,
 			Value: &coreVal,
@@ -450,7 +494,7 @@ func (a *Agent) sendMetricsURL(metrics []*models.Metrics) error {
 	return nil
 }
 
-func (a *Agent) sendMetricsJSON(metrics []*models.Metrics, gzipCompressed bool) error {
+func (a *Agent) sendMetricsJSON(metrics []models.Metrics, gzipCompressed bool) error {
 	if len(metrics) == 0 {
 		return nil
 	}
