@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
-	"encoding/hex"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -100,11 +100,15 @@ func NewAgent(cfg *config.AgentConfig) *Agent {
 }
 
 func (a *Agent) Run(ctx context.Context) {
-	metricsChan := make(chan []model.Metrics, a.cfg.RateLimit*2)
+	metricsChan := make(chan []model.Metrics, a.cfg.RateLimit)
+
+	var wg sync.WaitGroup
 
 	for i := 0; i < a.cfg.RateLimit; i++ {
+		wg.Add(1)
 		// RateLimit goroutines that read channel with metrics and send them.
 		go func() {
+			defer wg.Done()
 			for {
 				select {
 				case <-ctx.Done():
@@ -125,7 +129,7 @@ func (a *Agent) Run(ctx context.Context) {
 	go a.collectRuntimeMetrics(ctx, a.cfg.PollInterval)
 	go a.collectPSUMetrics(ctx, a.cfg.PollInterval)
 	go a.startReporting(ctx, a.cfg.ReportInterval, metricsChan)
-	<-ctx.Done()
+	wg.Wait()
 }
 
 func (a *Agent) collectRuntimeMetrics(ctx context.Context, interval time.Duration) {
@@ -222,16 +226,16 @@ func (a *Agent) updatePSUMetrics() error {
 		return err
 	}
 
-	a.mu.Lock()
-	defer a.mu.Unlock()
-
-	a.TotalMemory = float64(v.Total)
-	a.FreeMemory = float64(v.Free)
 	cpuPercentages, err := cpu.Percent(0, true)
 	if err != nil {
 		return err
 	}
 
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	a.TotalMemory = float64(v.Total)
+	a.FreeMemory = float64(v.Free)
 	a.CPUUtilizations = cpuPercentages
 
 	return nil
@@ -458,9 +462,10 @@ var metricsRegistry = []MetricDescriptor{
 }
 
 func (a *Agent) buildMetrics() []models.Metrics {
+	a.mu.Lock()
+	defer a.mu.Unlock()
 	result := make([]models.Metrics, 0, len(metricsRegistry)+len(a.CPUUtilizations))
 
-	a.mu.Lock()
 	for _, md := range metricsRegistry {
 		m := md.Get(a)
 		result = append(result, *m)
@@ -475,7 +480,7 @@ func (a *Agent) buildMetrics() []models.Metrics {
 			Value: &coreVal,
 		})
 	}
-	a.mu.Unlock()
+
 	return result
 }
 
@@ -523,7 +528,7 @@ func (a *Agent) sendMetricsJSON(metrics []models.Metrics, gzipCompressed bool) e
 	if a.cfg.Key != "" {
 		key := []byte(a.cfg.Key)
 		sign := hashing.Calculate(payload, key)
-		encodedSign := hex.EncodeToString(sign)
+		encodedSign := base64.StdEncoding.EncodeToString(sign)
 		req.SetHeader("HashSHA256", encodedSign)
 	}
 

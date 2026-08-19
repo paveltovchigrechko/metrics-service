@@ -2,7 +2,7 @@ package middleware
 
 import (
 	"bytes"
-	"encoding/hex"
+	"encoding/base64"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -14,7 +14,7 @@ func TestVerifyHashMiddleware(t *testing.T) {
 	secret := "test-secret-key"
 	keyBytes := []byte(secret)
 	bodyBytes := []byte(`{"id":"PollCount","type":"counter","delta":42}`)
-	validHash := hex.EncodeToString(hashing.Calculate(bodyBytes, keyBytes))
+	validHash := base64.StdEncoding.EncodeToString(hashing.Calculate(bodyBytes, keyBytes))
 
 	nextHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -49,7 +49,7 @@ func TestVerifyHashMiddleware(t *testing.T) {
 	t.Run("Hash mismatch returns 400", func(t *testing.T) {
 		mw := VerifyHashMiddleware(secret)(nextHandler)
 		req := httptest.NewRequest(http.MethodPost, "/", bytes.NewReader(bodyBytes))
-		wrongHash := hex.EncodeToString([]byte("incorrect-hash-signature"))
+		wrongHash := base64.StdEncoding.EncodeToString([]byte("incorrect-hash-signature"))
 		req.Header.Set("HashSHA256", wrongHash)
 		rec := httptest.NewRecorder()
 
@@ -119,7 +119,7 @@ func TestSignResponseMiddleware(t *testing.T) {
 		}
 
 		// Verify hash header is correctly calculated and attached
-		expectedHash := hex.EncodeToString(hashing.Calculate(responseBody, keyBytes))
+		expectedHash := base64.StdEncoding.EncodeToString(hashing.Calculate(responseBody, keyBytes))
 		actualHash := rec.Header().Get("HashSHA256")
 		if actualHash != expectedHash {
 			t.Errorf("expected hash %s, got %s", expectedHash, actualHash)
@@ -143,7 +143,7 @@ func TestSignResponseMiddleware(t *testing.T) {
 			t.Errorf("expected status 200, got %d", rec.Code)
 		}
 
-		expectedHash := hex.EncodeToString(hashing.Calculate(responseBody, keyBytes))
+		expectedHash := base64.StdEncoding.EncodeToString(hashing.Calculate(responseBody, keyBytes))
 		actualHash := rec.Header().Get("HashSHA256")
 		if actualHash != expectedHash {
 			t.Errorf("expected hash %s, got %s", expectedHash, actualHash)

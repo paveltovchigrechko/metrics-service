@@ -3,7 +3,7 @@ package middleware
 import (
 	"bytes"
 	"crypto/hmac"
-	"encoding/hex"
+	"encoding/base64"
 	"errors"
 	"io"
 	"net/http"
@@ -12,7 +12,7 @@ import (
 )
 
 var (
-	ErrHashMismatch = errors.New("header hash does not match body hash")
+	errHashMismatch = errors.New("header hash does not match body hash")
 )
 
 type hmacWriter struct {
@@ -55,7 +55,7 @@ func VerifyHashMiddleware(secretKey string) func(http.Handler) http.Handler {
 				return
 			}
 
-			receivedHash, err := hex.DecodeString(hashHeader)
+			receivedHash, err := base64.StdEncoding.DecodeString(hashHeader)
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusBadRequest)
 				return
@@ -71,7 +71,7 @@ func VerifyHashMiddleware(secretKey string) func(http.Handler) http.Handler {
 
 			expectedHash := hashing.Calculate(body, keyBytes)
 			if !hmac.Equal(receivedHash, expectedHash) {
-				http.Error(w, ErrHashMismatch.Error(), http.StatusBadRequest)
+				http.Error(w, errHashMismatch.Error(), http.StatusBadRequest)
 				return
 			}
 
@@ -103,7 +103,7 @@ func SignResponseMiddleware(secretKey string) func(http.Handler) http.Handler {
 			responseBody := hw.body.Bytes()
 			responseHash := hashing.Calculate(responseBody, keyBytes)
 
-			w.Header().Set("HashSHA256", hex.EncodeToString(responseHash))
+			w.Header().Set("HashSHA256", base64.StdEncoding.EncodeToString(responseHash))
 
 			code := hw.statusCode
 			if !hw.headerWritten {
