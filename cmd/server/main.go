@@ -2,6 +2,7 @@ package main
 
 import (
 	"log"
+	"net/http"
 	"os"
 
 	"github.com/paveltovchigrechko/metrics-service/internal/config"
@@ -29,7 +30,21 @@ func run() error {
 	}
 	defer l.Sync() // Flush at the end
 
-	serv, err := server.New(cfg, logger.LoggerMiddleware(l), middleware.GZIPMiddleware)
+	middlewares := []func(http.Handler) http.Handler{
+		logger.LoggerMiddleware(l),
+	}
+
+	if cfg.Key != "" {
+		middlewares = append(middlewares,
+			middleware.VerifyHashMiddleware(cfg.Key),
+			middleware.SignResponseMiddleware(cfg.Key),
+		)
+	}
+
+	middlewares = append(middlewares, middleware.GZIPMiddleware)
+
+	serv, err := server.New(cfg, middlewares...)
+
 	if err != nil {
 		return err
 	}

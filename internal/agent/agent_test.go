@@ -260,10 +260,10 @@ func TestBuildMetrics(t *testing.T) {
 }
 
 // Test helper
-func findMetric(metrics []*models.Metrics, id string) *models.Metrics {
+func findMetric(metrics []models.Metrics, id string) *models.Metrics {
 	for _, m := range metrics {
 		if m.ID == id {
-			return m
+			return &m
 		}
 	}
 	return nil

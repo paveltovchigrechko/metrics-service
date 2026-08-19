@@ -18,7 +18,6 @@ func NewMemStorage() *MemStorage {
 	}
 }
 
-// Add validations
 func (ms *MemStorage) GetMetrics(ctx context.Context, name, mtype string) (*model.Metrics, error) {
 	ms.mu.RLock()
 	defer ms.mu.RUnlock()

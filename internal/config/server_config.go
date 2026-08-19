@@ -16,11 +16,13 @@ const (
 	fileStoragePathFlag = "f"
 	restoreFlag         = "r"
 	databaseDSNFlag     = "d"
+	secretKeyFlag       = "k"
 
 	defaultAddress         = "localhost:8080"
 	defaultStoreInterval   = 300
 	defaultFileStoragePath = "metrics.json"
 	defaultDatabaseDSN     = ""
+	defaultSecretKey       = ""
 )
 
 var (
@@ -35,6 +37,7 @@ type ServerConfig struct {
 	FileStoragePath string        // Local file address to store server metrics.
 	Restore         bool          // Indicates if the server restores the metrics saved on FileStoragePath on start.
 	DatabaseDSN     string        // Address to connect to database.
+	Key             string
 }
 
 // envServerCongig stores the environment variables. All fields are pointers to distinguish if a value was set.
@@ -44,6 +47,7 @@ type envServerConfig struct {
 	FileStoragePath *string `env:"FILE_STORAGE_PATH"`
 	Restore         *bool   `env:"RESTORE"`
 	DatabaseDSN     *string `env:"DATABASE_DSN"`
+	Key             *string `env:"KEY"`
 }
 
 // SetSeverConfig returns the final ServerConfig to use.
@@ -97,6 +101,11 @@ func mergeServerConfigs(envCfg *envServerConfig, flagCfg *ServerConfig) *ServerC
 		flagCfg.DatabaseDSN = *envCfg.DatabaseDSN
 	}
 
+	// Set key
+	if envCfg.Key != nil {
+		flagCfg.Key = *envCfg.Key
+	}
+
 	return flagCfg
 }
 
@@ -109,6 +118,7 @@ func createServerFlagConfig(args []string) (*ServerConfig, error) {
 	fileStoragePath := fs.String(fileStoragePathFlag, defaultFileStoragePath, "File name to store metrics")
 	restore := fs.Bool(restoreFlag, true, "Indicate if server should restore metrics from the storage file")
 	databaseDSN := fs.String(databaseDSNFlag, defaultDatabaseDSN, "Database data source name")
+	key := fs.String(secretKeyFlag, defaultSecretKey, "Secret key to encrypt data")
 
 	err := fs.Parse(args)
 	if err != nil {
@@ -123,6 +133,7 @@ func createServerFlagConfig(args []string) (*ServerConfig, error) {
 		FileStoragePath: *fileStoragePath,
 		Restore:         *restore,
 		DatabaseDSN:     *databaseDSN,
+		Key:             *key,
 	}
 
 	return cfg, nil
@@ -138,7 +149,7 @@ func parseEnvServerConfig() (*envServerConfig, error) {
 	}
 
 	// Treat empty environment variables as error.
-	// Don't check DATABASE_DSN: it's OK to have it empty.
+	// Don't check DATABASE_DSN and KEY: it's OK to have them empty.
 	if envCfg.FileStoragePath != nil && strings.Trim(*envCfg.FileStoragePath, " ") == "" {
 		return nil, errEmptyFileStoragePath
 	}

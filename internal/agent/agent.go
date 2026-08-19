@@ -3,17 +3,24 @@ package agent
 import (
 	"bytes"
 	"compress/gzip"
+	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"log"
 	"math"
 	"math/rand"
 	"runtime"
+	"sync"
 	"time"
 
 	"github.com/go-resty/resty/v2"
 	"github.com/paveltovchigrechko/metrics-service/internal/config"
+	"github.com/paveltovchigrechko/metrics-service/internal/hashing"
+	"github.com/paveltovchigrechko/metrics-service/internal/model"
 	models "github.com/paveltovchigrechko/metrics-service/internal/model"
+	"github.com/shirou/gopsutil/v4/cpu"
+	"github.com/shirou/gopsutil/v4/mem"
 )
 
 const (
@@ -27,7 +34,9 @@ type Agent struct {
 	m      *runtime.MemStats
 	client *resty.Client
 	cfg    *config.AgentConfig
+	mu     sync.Mutex
 
+	// Runtime metrics
 	Alloc         uint64
 	BuckHashSys   uint64
 	Frees         uint64
@@ -58,6 +67,11 @@ type Agent struct {
 
 	PollCount   int64
 	RandomValue float64
+
+	// Metrics from gopsutil
+	TotalMemory     float64
+	FreeMemory      float64
+	CPUUtilizations []float64
 }
 
 func NewAgent(cfg *config.AgentConfig) *Agent {
@@ -85,27 +99,94 @@ func NewAgent(cfg *config.AgentConfig) *Agent {
 	}
 }
 
-func (a *Agent) Run() {
-	// time.Ticker was suggested by AI
-	pollTicker := time.NewTicker(a.cfg.PollInterval)
-	reportTicker := time.NewTicker(a.cfg.ReportInterval)
+func (a *Agent) Run(ctx context.Context) {
+	metricsChan := make(chan []model.Metrics, a.cfg.RateLimit)
+
+	var wg sync.WaitGroup
+
+	for i := 0; i < a.cfg.RateLimit; i++ {
+		wg.Add(1)
+		// RateLimit goroutines that read channel with metrics and send them.
+		go func() {
+			defer wg.Done()
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case metrics, ok := <-metricsChan:
+					if !ok {
+						return
+					}
+					if err := a.sendMetricsJSON(metrics, true); err != nil {
+						log.Printf("failed to send metrics: %v", err)
+					}
+				}
+			}
+		}()
+	}
+
+	// Separate goroutines for runtime and PSU metrics and reporting.
+	go a.collectRuntimeMetrics(ctx, a.cfg.PollInterval)
+	go a.collectPSUMetrics(ctx, a.cfg.PollInterval)
+	go a.startReporting(ctx, a.cfg.ReportInterval, metricsChan)
+	wg.Wait()
+}
+
+func (a *Agent) collectRuntimeMetrics(ctx context.Context, interval time.Duration) {
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
 
 	for {
 		select {
-		case <-pollTicker.C:
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
 			runtime.ReadMemStats(a.m)
 			a.updateMetrics()
-		case <-reportTicker.C:
+		}
+	}
+}
+
+func (a *Agent) collectPSUMetrics(ctx context.Context, interval time.Duration) {
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			if err := a.updatePSUMetrics(); err != nil {
+				log.Print("failed to fetch PSU metrics: ", err)
+			}
+		}
+	}
+}
+
+func (a *Agent) startReporting(ctx context.Context, interval time.Duration, metricsChan chan<- []model.Metrics) {
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
 			metrics := a.buildMetrics()
-			err := a.sendMetricsJSON(metrics, true)
-			if err != nil {
-				log.Print(err)
+
+			select {
+			case metricsChan <- metrics:
+			case <-ctx.Done():
+				return
 			}
 		}
 	}
 }
 
 func (a *Agent) updateMetrics() {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
 	// Use reflect to copy values?
 	a.Alloc = a.m.Alloc
 	a.BuckHashSys = a.m.BuckHashSys
@@ -137,6 +218,27 @@ func (a *Agent) updateMetrics() {
 
 	a.PollCount++
 	a.RandomValue = calcNewRandomValue()
+}
+
+func (a *Agent) updatePSUMetrics() error {
+	v, err := mem.VirtualMemory()
+	if err != nil {
+		return err
+	}
+
+	cpuPercentages, err := cpu.Percent(0, true)
+	if err != nil {
+		return err
+	}
+
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	a.TotalMemory = float64(v.Total)
+	a.FreeMemory = float64(v.Free)
+	a.CPUUtilizations = cpuPercentages
+
+	return nil
 }
 
 type MetricDescriptor struct {
@@ -345,15 +447,40 @@ var metricsRegistry = []MetricDescriptor{
 			return m
 		},
 	},
+	{
+		Get: func(a *Agent) *models.Metrics {
+			m, _ := models.CreateMetrics("TotalMemory", models.Gauge, 0, a.TotalMemory)
+			return m
+		},
+	},
+	{
+		Get: func(a *Agent) *models.Metrics {
+			m, _ := models.CreateMetrics("FreeMemory", models.Gauge, 0, a.FreeMemory)
+			return m
+		},
+	},
 }
 
-func (a *Agent) buildMetrics() []*models.Metrics {
-	result := make([]*models.Metrics, 0, len(metricsRegistry))
+func (a *Agent) buildMetrics() []models.Metrics {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	result := make([]models.Metrics, 0, len(metricsRegistry)+len(a.CPUUtilizations))
 
 	for _, md := range metricsRegistry {
 		m := md.Get(a)
-		result = append(result, m)
+		result = append(result, *m)
 	}
+
+	for i, val := range a.CPUUtilizations {
+		coreVal := val
+		metricName := fmt.Sprintf("CPUutilization%d", i+1)
+		result = append(result, model.Metrics{
+			ID:    metricName,
+			MType: model.Gauge,
+			Value: &coreVal,
+		})
+	}
+
 	return result
 }
 
@@ -368,29 +495,26 @@ func (a *Agent) sendMetricsURL(metrics []*models.Metrics) error {
 		}
 
 	}
-	// Should we reset a.PollCount here?
+
 	return nil
 }
 
-func (a *Agent) sendMetricsJSON(metrics []*models.Metrics, gzipCompressed bool) error {
+func (a *Agent) sendMetricsJSON(metrics []models.Metrics, gzipCompressed bool) error {
 	if len(metrics) == 0 {
 		return nil
 	}
 
-	url := fmt.Sprintf("http://%s/updates", a.cfg.ServerAddress)
+	rawJSON, err := json.Marshal(metrics)
+	if err != nil {
+		return err
+	}
 
-	var payload interface{} = metrics
-	var err error
+	payload := rawJSON
 
 	req := a.client.R().
 		SetHeader("Content-Type", applicationJSON)
 
 	if gzipCompressed {
-		rawJSON, err := json.Marshal(metrics)
-		if err != nil {
-			return err
-		}
-
 		compressedBytes, err := gzipCompressJSON(rawJSON)
 		if err != nil {
 			return err
@@ -400,6 +524,15 @@ func (a *Agent) sendMetricsJSON(metrics []*models.Metrics, gzipCompressed bool) 
 		payload = compressedBytes
 	}
 
+	// check if we need hashing
+	if a.cfg.Key != "" {
+		key := []byte(a.cfg.Key)
+		sign := hashing.Calculate(payload, key)
+		encodedSign := base64.StdEncoding.EncodeToString(sign)
+		req.SetHeader("HashSHA256", encodedSign)
+	}
+
+	url := fmt.Sprintf("http://%s/updates", a.cfg.ServerAddress)
 	resp, err := req.SetBody(payload).Post(url)
 
 	if err != nil {

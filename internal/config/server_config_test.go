@@ -18,6 +18,7 @@ func TestSetServerConfig_Positive(t *testing.T) {
 		wantPath     string
 		wantRestore  bool
 		wantDSN      string
+		wantKey      string
 	}{
 		{
 			name:         "Default values when no env or flags are set",
@@ -28,36 +29,40 @@ func TestSetServerConfig_Positive(t *testing.T) {
 			wantPath:     "metrics.json",
 			wantRestore:  true,
 			wantDSN:      "",
+			wantKey:      "",
 		},
 		{
 			name:         "Flags are parsed correctly when no env is present",
-			args:         []string{"-a", "127.0.0.1:9090", "-i", "10", "-f", "test.json", "-r=false", "-d", "db_address"},
+			args:         []string{"-a", "127.0.0.1:9090", "-i", "10", "-f", "test.json", "-r=false", "-d", "db_address", "-k", "key"},
 			envVars:      map[string]string{},
 			wantAddr:     "127.0.0.1:9090",
 			wantInterval: 10 * time.Second,
 			wantPath:     "test.json",
 			wantRestore:  false,
 			wantDSN:      "db_address",
+			wantKey:      "key",
 		},
 		{
 			name: "Env variables override flags completely",
-			args: []string{"-a", "127.0.0.1:9090", "-i", "10", "-f", "test.json", "-r=false", "-d", "db_address"},
+			args: []string{"-a", "127.0.0.1:9090", "-i", "10", "-f", "test.json", "-r=false", "-d", "db_address", "-k", "key"},
 			envVars: map[string]string{
 				"ADDRESS":           "0.0.0.0:3000",
 				"STORE_INTERVAL":    "15",
 				"FILE_STORAGE_PATH": "env.json",
 				"RESTORE":           "true",
 				"DATABASE_DSN":      "env_db_address",
+				"KEY":               "env key",
 			},
 			wantAddr:     "0.0.0.0:3000",
 			wantInterval: 15 * time.Second,
 			wantPath:     "env.json",
 			wantRestore:  true,
 			wantDSN:      "env_db_address",
+			wantKey:      "env key",
 		},
 		{
 			name: "Partial Env overrides only specific flags",
-			args: []string{"-a", "127.0.0.1:9090", "-i", "10", "-d", "flag_db_address"},
+			args: []string{"-a", "127.0.0.1:9090", "-i", "10", "-d", "flag_db_address", "-k", "key"},
 			envVars: map[string]string{
 				"ADDRESS": "0.0.0.0:3000",
 			},
@@ -66,6 +71,7 @@ func TestSetServerConfig_Positive(t *testing.T) {
 			wantPath:     "metrics.json",
 			wantRestore:  true,
 			wantDSN:      "flag_db_address",
+			wantKey:      "key",
 		},
 	}
 
@@ -77,6 +83,7 @@ func TestSetServerConfig_Positive(t *testing.T) {
 			t.Setenv("FILE_STORAGE_PATH", "")
 			t.Setenv("RESTORE", "")
 			t.Setenv("DATABASE_DSN", "")
+			t.Setenv("KEY", "")
 
 			for k, v := range tc.envVars {
 				t.Setenv(k, v)
@@ -91,6 +98,7 @@ func TestSetServerConfig_Positive(t *testing.T) {
 			assert.Equal(t, tc.wantPath, cfg.FileStoragePath)
 			assert.Equal(t, tc.wantRestore, cfg.Restore)
 			assert.Equal(t, tc.wantDSN, cfg.DatabaseDSN)
+			assert.Equal(t, tc.wantKey, cfg.Key)
 		})
 	}
 }
@@ -133,7 +141,7 @@ func TestSetServerConfig_Negative(t *testing.T) {
 
 func TestCreateServerFlagConfig(t *testing.T) {
 	t.Run("should parse custom flags successfully", func(t *testing.T) {
-		args := []string{"-a", "127.0.0.1:4444", "-i", "120", "-f", "flag_test.json", "-r=false", "-d", "db_address"}
+		args := []string{"-a", "127.0.0.1:4444", "-i", "120", "-f", "flag_test.json", "-r=false", "-d", "db_address", "-k", "key"}
 		cfg, err := createServerFlagConfig(args)
 
 		require.NoError(t, err)
@@ -143,6 +151,7 @@ func TestCreateServerFlagConfig(t *testing.T) {
 		assert.Equal(t, "flag_test.json", cfg.FileStoragePath)
 		assert.False(t, cfg.Restore)
 		assert.Equal(t, "db_address", cfg.DatabaseDSN)
+		assert.Equal(t, "key", cfg.Key)
 	})
 
 	t.Run("should return error on invalid flags", func(t *testing.T) {
@@ -161,6 +170,7 @@ func TestCreateEnvConfig(t *testing.T) {
 		t.Setenv("FILE_STORAGE_PATH", "env_test.json")
 		t.Setenv("RESTORE", "false")
 		t.Setenv("DATABASE_DSN", "env_db_address")
+		t.Setenv("KEY", "env key")
 
 		envCfg, err := parseEnvServerConfig()
 
@@ -172,6 +182,7 @@ func TestCreateEnvConfig(t *testing.T) {
 		assert.Equal(t, "env_test.json", *envCfg.FileStoragePath)
 		assert.False(t, *envCfg.Restore)
 		assert.Equal(t, "env_db_address", *envCfg.DatabaseDSN)
+		assert.Equal(t, "env key", *envCfg.Key)
 	})
 
 	t.Run("should succeed when no env vars are defined (pointers are nil)", func(t *testing.T) {
@@ -180,6 +191,7 @@ func TestCreateEnvConfig(t *testing.T) {
 		t.Setenv("FILE_STORAGE_PATH", "")
 		t.Setenv("RESTORE", "")
 		t.Setenv("DATABASE_DSN", "")
+		t.Setenv("KEY", "")
 
 		envCfg, err := parseEnvServerConfig()
 
@@ -190,6 +202,7 @@ func TestCreateEnvConfig(t *testing.T) {
 		assert.Nil(t, envCfg.FileStoragePath)
 		assert.Nil(t, envCfg.Restore)
 		assert.Nil(t, envCfg.DatabaseDSN)
+		assert.Nil(t, envCfg.Key)
 	})
 }
 
@@ -206,6 +219,7 @@ func TestMergeConfigs(t *testing.T) {
 			FileStoragePath: "flag-file.json",
 			Restore:         true,
 			DatabaseDSN:     "flag_db_address",
+			Key:             "key",
 		}
 
 		envCfg := &envServerConfig{
@@ -214,6 +228,7 @@ func TestMergeConfigs(t *testing.T) {
 			FileStoragePath: strPtr("env-file.json"),
 			Restore:         boolPtr(false),
 			DatabaseDSN:     strPtr("env_db_address"),
+			Key:             strPtr("env key"),
 		}
 
 		merged := mergeServerConfigs(envCfg, flagCfg)
@@ -224,6 +239,7 @@ func TestMergeConfigs(t *testing.T) {
 		assert.Equal(t, "env-file.json", merged.FileStoragePath)
 		assert.False(t, merged.Restore)
 		assert.Equal(t, "env_db_address", merged.DatabaseDSN)
+		assert.Equal(t, "env key", merged.Key)
 	})
 
 	t.Run("should retain flag config values if env pointers are nil", func(t *testing.T) {
@@ -233,6 +249,7 @@ func TestMergeConfigs(t *testing.T) {
 			FileStoragePath: "flag-file.json",
 			Restore:         true,
 			DatabaseDSN:     "flag_db_address",
+			Key:             "key",
 		}
 
 		envCfg := &envServerConfig{
@@ -241,6 +258,7 @@ func TestMergeConfigs(t *testing.T) {
 			FileStoragePath: nil,
 			Restore:         nil,
 			DatabaseDSN:     nil,
+			Key:             nil,
 		}
 
 		merged := mergeServerConfigs(envCfg, flagCfg)
@@ -251,5 +269,6 @@ func TestMergeConfigs(t *testing.T) {
 		assert.Equal(t, "flag-file.json", merged.FileStoragePath)
 		assert.True(t, merged.Restore)
 		assert.Equal(t, "flag_db_address", merged.DatabaseDSN)
+		assert.Equal(t, "key", merged.Key)
 	})
 }
