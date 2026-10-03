@@ -17,6 +17,8 @@ const (
 	restoreFlag         = "r"
 	databaseDSNFlag     = "d"
 	secretKeyFlag       = "k"
+	auditFilePathFlag   = "audit-file"
+	auditURLFlag        = "audit-url"
 
 	defaultAddress         = "localhost:8080"
 	defaultStoreInterval   = 300
@@ -38,6 +40,8 @@ type ServerConfig struct {
 	Restore         bool          // Indicates if the server restores the metrics saved on FileStoragePath on start.
 	DatabaseDSN     string        // Address to connect to database.
 	Key             string
+	AuditFilePath   string // File path to store audit logs.
+	AuditURL        string // URL to send audit logs.
 }
 
 // envServerCongig stores the environment variables. All fields are pointers to distinguish if a value was set.
@@ -48,6 +52,8 @@ type envServerConfig struct {
 	Restore         *bool   `env:"RESTORE"`
 	DatabaseDSN     *string `env:"DATABASE_DSN"`
 	Key             *string `env:"KEY"`
+	AuditFilePath   *string `env:"AUDIT_FILE"`
+	AuditURL        *string `env:"AUDIT_URL"`
 }
 
 // SetSeverConfig returns the final ServerConfig to use.
@@ -106,6 +112,16 @@ func mergeServerConfigs(envCfg *envServerConfig, flagCfg *ServerConfig) *ServerC
 		flagCfg.Key = *envCfg.Key
 	}
 
+	// Set audit file path
+	if envCfg.AuditFilePath != nil {
+		flagCfg.AuditFilePath = *envCfg.AuditFilePath
+	}
+
+	// Set audit URL
+	if envCfg.AuditURL != nil {
+		flagCfg.AuditURL = *envCfg.AuditURL
+	}
+
 	return flagCfg
 }
 
@@ -119,6 +135,8 @@ func createServerFlagConfig(args []string) (*ServerConfig, error) {
 	restore := fs.Bool(restoreFlag, true, "Indicate if server should restore metrics from the storage file")
 	databaseDSN := fs.String(databaseDSNFlag, defaultDatabaseDSN, "Database data source name")
 	key := fs.String(secretKeyFlag, defaultSecretKey, "Secret key to encrypt data")
+	auditFilePath := fs.String(auditFilePathFlag, "", "File path to store audit logs")
+	auditURL := fs.String(auditURLFlag, "", "URL to send audit logs")
 
 	err := fs.Parse(args)
 	if err != nil {
@@ -126,6 +144,8 @@ func createServerFlagConfig(args []string) (*ServerConfig, error) {
 	}
 
 	storeIntervalSec := time.Duration(*storeInterval) * time.Second
+	cleanedAuditFilePath := strings.Trim(*auditFilePath, " ")
+	cleanedAuditURL := strings.Trim(*auditURL, " ")
 
 	cfg := &ServerConfig{
 		ServerAddress:   *address,
@@ -134,6 +154,8 @@ func createServerFlagConfig(args []string) (*ServerConfig, error) {
 		Restore:         *restore,
 		DatabaseDSN:     *databaseDSN,
 		Key:             *key,
+		AuditFilePath:   cleanedAuditFilePath,
+		AuditURL:        cleanedAuditURL,
 	}
 
 	return cfg, nil
@@ -150,12 +172,20 @@ func parseEnvServerConfig() (*envServerConfig, error) {
 
 	// Treat empty environment variables as error.
 	// Don't check DATABASE_DSN and KEY: it's OK to have them empty.
-	if envCfg.FileStoragePath != nil && strings.Trim(*envCfg.FileStoragePath, " ") == "" {
+	if envCfg.FileStoragePath != nil && strings.TrimSpace(*envCfg.FileStoragePath) == "" {
 		return nil, errEmptyFileStoragePath
 	}
 
-	if envCfg.ServerAddress != nil && strings.Trim(*envCfg.ServerAddress, " ") == "" {
+	if envCfg.ServerAddress != nil && strings.TrimSpace(*envCfg.ServerAddress) == "" {
 		return nil, errEmptyServerAddress
+	}
+
+	if envCfg.AuditFilePath != nil && strings.TrimSpace(*envCfg.AuditFilePath) == "" {
+		*envCfg.AuditFilePath = ""
+	}
+
+	if envCfg.AuditURL != nil && strings.TrimSpace(*envCfg.AuditURL) == "" {
+		*envCfg.AuditURL = ""
 	}
 
 	return envCfg, nil
