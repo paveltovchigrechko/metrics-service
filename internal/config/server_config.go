@@ -88,8 +88,8 @@ func mergeServerConfigs(envCfg *envServerConfig, flagCfg *ServerConfig) *ServerC
 
 	// Set store interval
 	if envCfg.StoreInterval != nil {
-		storeIntervalSeconds := time.Duration(*envCfg.StoreInterval) * time.Second
-		flagCfg.StoreInterval = storeIntervalSeconds
+		storeInterval := time.Duration(*envCfg.StoreInterval) * time.Second
+		flagCfg.StoreInterval = storeInterval
 	}
 
 	// Set file path to store metrics
@@ -143,13 +143,13 @@ func createServerFlagConfig(args []string) (*ServerConfig, error) {
 		return nil, err
 	}
 
-	storeIntervalSec := time.Duration(*storeInterval) * time.Second
+	storeInt := time.Duration(*storeInterval) * time.Second
 	cleanedAuditFilePath := strings.Trim(*auditFilePath, " ")
 	cleanedAuditURL := strings.Trim(*auditURL, " ")
 
 	cfg := &ServerConfig{
 		ServerAddress:   *address,
-		StoreInterval:   storeIntervalSec,
+		StoreInterval:   storeInt,
 		FileStoragePath: *fileStoragePath,
 		Restore:         *restore,
 		DatabaseDSN:     *databaseDSN,

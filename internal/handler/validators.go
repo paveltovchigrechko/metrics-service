@@ -17,9 +17,9 @@ const (
 )
 
 var (
-	ErrInvalidMetricsValue    = errors.New("Invalid metric value")
-	ErrInvalidRequestMethod   = errors.New("Invalid request method")
-	ErrUnsupportedContentType = errors.New("Unsupported content type")
+	ErrInvalidMetricsValue    = errors.New("invalid metric value")
+	ErrInvalidRequestMethod   = errors.New("invalid request method")
+	ErrUnsupportedContentType = errors.New("unsupported content type")
 )
 
 func validateMetricsType(req *http.Request) error {

@@ -273,7 +273,7 @@ func TestCreateURLFromMetric(t *testing.T) {
 	testCases := []struct {
 		name        string
 		m           *models.Metrics
-		expectedUrl string
+		expectedURL string
 	}{
 		{
 			name: "Counter metrics",
@@ -285,7 +285,7 @@ func TestCreateURLFromMetric(t *testing.T) {
 					Delta: &delta,
 				}
 			}(),
-			expectedUrl: "http://localhost:8080/update/counter/someName/8",
+			expectedURL: "http://localhost:8080/update/counter/someName/8",
 		},
 		{
 			name: "Gauge metrics",
@@ -297,7 +297,7 @@ func TestCreateURLFromMetric(t *testing.T) {
 					Value: &value,
 				}
 			}(),
-			expectedUrl: "http://localhost:8080/update/gauge/someName/8.89",
+			expectedURL: "http://localhost:8080/update/gauge/someName/8.89",
 		},
 	}
 	cfg, err := config.SetAgentConfig([]string{})
@@ -309,7 +309,7 @@ func TestCreateURLFromMetric(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			result := a.createURLFromMetric(tc.m)
-			assert.Equal(t, tc.expectedUrl, result)
+			assert.Equal(t, tc.expectedURL, result)
 		})
 	}
 }
