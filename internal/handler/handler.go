@@ -4,15 +4,16 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
 	"strconv"
 	"text/template"
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/paveltovchigrechko/metrics-service/internal/audit"
 	"github.com/paveltovchigrechko/metrics-service/internal/logger"
 	"github.com/paveltovchigrechko/metrics-service/internal/model"
-	models "github.com/paveltovchigrechko/metrics-service/internal/model"
 	"github.com/paveltovchigrechko/metrics-service/internal/repository"
 )
 
@@ -35,13 +36,15 @@ type AppHandler struct {
 	// Should be used by server.Server if config.ServerConfig.StoreInterval == 0.
 	// For other cases, the function value must be nil.
 	afterSuccessfulUpdate func() error
+	notifier              audit.Notifier
 }
 
-func NewHandler(s repository.Storage, p Pinger, updateFunc func() error) *AppHandler {
+func NewHandler(s repository.Storage, p Pinger, updateFunc func() error, notifier audit.Notifier) *AppHandler {
 	h := &AppHandler{
 		storage:               s,
 		pinger:                p,
 		afterSuccessfulUpdate: updateFunc,
+		notifier:              notifier,
 	}
 
 	return h
@@ -55,7 +58,7 @@ func (h *AppHandler) PostMetrics(w http.ResponseWriter, req *http.Request) {
 
 	if err := validateReqPath(req); err != nil {
 		switch err {
-		case ErrInvalidMetricsValue, models.ErrUnknownMetricsType:
+		case ErrInvalidMetricsValue, model.ErrUnknownMetricsType:
 			WriteError(w, err, http.StatusBadRequest)
 		default:
 			WriteError(w, err, http.StatusBadRequest)
@@ -67,6 +70,10 @@ func (h *AppHandler) PostMetrics(w http.ResponseWriter, req *http.Request) {
 	if err != nil {
 		WriteError(w, err, http.StatusBadRequest)
 		return
+	}
+
+	if err := h.audit(req, model.Metrics{ID: chi.URLParam(req, "metricsName")}); err != nil {
+		log.Printf("audit: %v", err) // Audit failure must not fail the request.
 	}
 
 	if h.afterSuccessfulUpdate != nil {
@@ -118,9 +125,9 @@ func (h *AppHandler) MetricsValue(w http.ResponseWriter, req *http.Request) {
 
 	w.WriteHeader(http.StatusOK)
 	switch metrics.MType {
-	case models.Counter:
+	case model.Counter:
 		w.Write([]byte(strconv.FormatInt(*metrics.Delta, 10)))
-	case models.Gauge:
+	case model.Gauge:
 		w.Write([]byte(strconv.FormatFloat(*metrics.Value, 'f', -1, 64)))
 	}
 }
@@ -148,6 +155,10 @@ func (h *AppHandler) UpdateEndpoint(w http.ResponseWriter, req *http.Request) {
 	if err != nil {
 		WriteError(w, err, http.StatusBadRequest)
 		return
+	}
+
+	if err := h.audit(req, *parsedMetrics); err != nil {
+		log.Printf("audit: %v", err) // Audit failure must not fail the request.
 	}
 
 	if h.afterSuccessfulUpdate != nil {
@@ -178,16 +189,20 @@ func (h *AppHandler) UpdatesEndpoint(w http.ResponseWriter, req *http.Request) {
 
 	err = h.storage.SaveBatch(req.Context(), parsedMetrics)
 	if err != nil {
-		if errors.Is(err, models.ErrDeltaIsNil) ||
-			errors.Is(err, models.ErrEmptyMetricsID) ||
-			errors.Is(err, models.ErrUnknownMetricsType) ||
-			errors.Is(err, models.ErrValueIsNil) ||
-			errors.Is(err, models.ErrDeltaAndValuePresent) {
+		if errors.Is(err, model.ErrDeltaIsNil) ||
+			errors.Is(err, model.ErrEmptyMetricsID) ||
+			errors.Is(err, model.ErrUnknownMetricsType) ||
+			errors.Is(err, model.ErrValueIsNil) ||
+			errors.Is(err, model.ErrDeltaAndValuePresent) {
 			WriteError(w, err, http.StatusBadRequest)
 			return
 		}
 		WriteError(w, err, http.StatusInternalServerError)
 		return
+	}
+
+	if err := h.audit(req, parsedMetrics...); err != nil {
+		log.Printf("audit: %v", err) // Audit failure must not fail the request.
 	}
 
 	if h.afterSuccessfulUpdate != nil {
@@ -272,16 +287,16 @@ func (h *AppHandler) processMetrics(req *http.Request) error {
 }
 
 // This function assumes the input url.Url passed validateReqPath().
-func parseMetrics(req *http.Request) (*models.Metrics, error) {
+func parseMetrics(req *http.Request) (*model.Metrics, error) {
 	metricsType, metricsName, metricsValue := chi.URLParam(req, "metricsType"), chi.URLParam(req, "metricsName"), chi.URLParam(req, "metricsValue")
 	// check for empty strings?
-	m := models.Metrics{
+	m := model.Metrics{
 		ID:    metricsName,
 		MType: metricsType,
 	}
 
 	// TODO: Remove duplicate logic with validateReqPath().
-	if metricsType == models.Counter {
+	if metricsType == model.Counter {
 		value, err := strconv.ParseInt(metricsValue, 10, 64)
 		if err != nil {
 			return nil, err
@@ -298,8 +313,8 @@ func parseMetrics(req *http.Request) (*models.Metrics, error) {
 	return &m, nil
 }
 
-func decodeJSONMetrics(req *http.Request) (*models.Metrics, error) {
-	var jsonMetrics models.Metrics
+func decodeJSONMetrics(req *http.Request) (*model.Metrics, error) {
+	var jsonMetrics model.Metrics
 	decoder := json.NewDecoder(req.Body)
 	decoder.DisallowUnknownFields()
 
@@ -311,8 +326,8 @@ func decodeJSONMetrics(req *http.Request) (*models.Metrics, error) {
 	return &jsonMetrics, nil
 }
 
-func decodeJSONBatch(req *http.Request) ([]models.Metrics, error) {
-	metrics := make([]models.Metrics, 0)
+func decodeJSONBatch(req *http.Request) ([]model.Metrics, error) {
+	metrics := make([]model.Metrics, 0)
 	decoder := json.NewDecoder(req.Body)
 	decoder.DisallowUnknownFields()
 

@@ -49,6 +49,7 @@ func run() error {
 		return err
 	}
 	defer serv.StopDB()
+	defer serv.StopAudit() // Runs before StopDB: flush audit events after the server stopped.
 
 	err = serv.Run()
 	if err != nil {
