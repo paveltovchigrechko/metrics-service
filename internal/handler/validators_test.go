@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/go-chi/chi/v5"
-	models "github.com/paveltovchigrechko/metrics-service/internal/model"
+	"github.com/paveltovchigrechko/metrics-service/internal/model"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -43,7 +43,7 @@ func TestValidateReqPath(t *testing.T) {
 				"metricsType":  "histogram",
 				"metricsValue": "100",
 			},
-			expectedErr: models.ErrUnknownMetricsType,
+			expectedErr: model.ErrUnknownMetricsType,
 		},
 		{
 			name: "negative test: invalid gauge float",
