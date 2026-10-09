@@ -59,6 +59,27 @@ func New() (*zap.SugaredLogger, error) {
 	return sugar, nil
 }
 
+const MaxLoggedBodySize = 512
+
+func peekBody(body io.ReadCloser, limit int) (head []byte, truncated bool, restored io.ReadCloser, err error) {
+	buf := make([]byte, limit+1)
+	n, err := io.ReadFull(body, buf)
+	if err == io.EOF || err == io.ErrUnexpectedEOF {
+		err = nil // The body is shorter than the buffer, that's fine.
+	}
+
+	restored = struct {
+		io.Reader
+		io.Closer
+	}{io.MultiReader(bytes.NewReader(buf[:n]), body), body}
+
+	if n > limit {
+		return buf[:limit], true, restored, err
+	}
+
+	return buf[:n], false, restored, err
+}
+
 func LoggerMiddleware(log *zap.SugaredLogger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler { // This function is basically a cast to get the required signature for func (mx *chi.Mux) Use(middlewares ...func(http.Handler) http.Handler)
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -73,14 +94,14 @@ func LoggerMiddleware(log *zap.SugaredLogger) func(http.Handler) http.Handler {
 				responseData:   responseData,
 			}
 
-			var bodyBytes []byte
-			if r.Body != nil {
+			var bodyHead []byte
+			var bodyTruncated bool
+			if r.Body != nil && r.Body != http.NoBody {
 				var err error
-				bodyBytes, err = io.ReadAll(r.Body)
+				bodyHead, bodyTruncated, r.Body, err = peekBody(r.Body, MaxLoggedBodySize)
 				if err != nil {
 					log.Errorw("Failed to read request body for logging", "error", err)
 				}
-				r.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
 			}
 
 			ct := r.Header.Get("Content-Type")
@@ -93,7 +114,9 @@ func LoggerMiddleware(log *zap.SugaredLogger) func(http.Handler) http.Handler {
 				"request completed",
 				"uri", r.RequestURI,
 				"method", r.Method,
-				"request body", string(bodyBytes),
+				"request body", string(bodyHead),
+				"request body truncated", bodyTruncated,
+				"request content length", r.ContentLength,
 				"request content type", ct,
 				"request content encoding", ce,
 				"response status", responseData.status,

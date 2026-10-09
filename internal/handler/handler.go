@@ -1,12 +1,12 @@
 package handler
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"log"
 	"net/http"
+	"slices"
 	"strconv"
 	"time"
 
@@ -17,13 +17,7 @@ import (
 	"github.com/paveltovchigrechko/metrics-service/internal/repository"
 )
 
-const (
-	databasePingTimeout = 3 * time.Second
-
-	// Estimates to pre-size the main page buffer: bytes per metric row and for the page without rows.
-	mainPageRowSize  = 64
-	mainPageOverhead = 512
-)
+const databasePingTimeout = 3 * time.Second
 
 var (
 	errNoDatabase          = errors.New("no database configured")
@@ -100,19 +94,20 @@ func (h *AppHandler) MainPage(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	rows := newMetricRows(metrics)
-
-	// Render into a buffer first: the template makes many small writes, which would otherwise go
-	// straight to the connection, and a template error can still be answered with a clean 500.
-	var buf bytes.Buffer
-	buf.Grow(len(rows)*mainPageRowSize + mainPageOverhead)
-	if err := mainPageTmpl.Execute(&buf, rows); err != nil {
-		WriteError(w, err, http.StatusInternalServerError)
-		return
-	}
+	// Build the whole page in a reusable buffer and write it at once: small writes straight to the
+	// connection are slow.
+	bufPtr := pagePool.Get().(*[]byte)
+	page := slices.Grow((*bufPtr)[:0], len(metrics)*mainPageRowSize+mainPageOverhead)
+	page = appendMainPage(page, metrics)
 
 	w.Header().Set(contentType, "text/html; charset=utf-8")
-	w.Write(buf.Bytes())
+	w.Write(page)
+
+	// The ResponseWriter must not keep the slice after Write returns, so the buffer can be reused.
+	if cap(page) <= maxPooledPageSize {
+		*bufPtr = page
+		pagePool.Put(bufPtr)
+	}
 }
 
 func (h *AppHandler) MetricsValue(w http.ResponseWriter, req *http.Request) {
