@@ -1,13 +1,13 @@
 package handler
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"log"
 	"net/http"
 	"strconv"
-	"text/template"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -17,7 +17,13 @@ import (
 	"github.com/paveltovchigrechko/metrics-service/internal/repository"
 )
 
-const databasePingTimeout = 3 * time.Second
+const (
+	databasePingTimeout = 3 * time.Second
+
+	// Estimates to pre-size the main page buffer: bytes per metric row and for the page without rows.
+	mainPageRowSize  = 64
+	mainPageOverhead = 512
+)
 
 var (
 	errNoDatabase          = errors.New("no database configured")
@@ -88,24 +94,25 @@ func (h *AppHandler) PostMetrics(w http.ResponseWriter, req *http.Request) {
 }
 
 func (h *AppHandler) MainPage(w http.ResponseWriter, req *http.Request) {
-	w.Header().Set(contentType, "text/html; charset=utf-8")
-
-	t, err := template.New("mainpage").Funcs(templateFuncs).Parse(mainPageTpl)
-	if err != nil {
-		WriteError(w, err, http.StatusInternalServerError)
-		return
-	}
-
 	metrics, err := h.storage.GetAllMetrics(req.Context())
 	if err != nil {
 		WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
 
-	if err := t.Execute(w, metrics); err != nil {
+	rows := newMetricRows(metrics)
+
+	// Render into a buffer first: the template makes many small writes, which would otherwise go
+	// straight to the connection, and a template error can still be answered with a clean 500.
+	var buf bytes.Buffer
+	buf.Grow(len(rows)*mainPageRowSize + mainPageOverhead)
+	if err := mainPageTmpl.Execute(&buf, rows); err != nil {
 		WriteError(w, err, http.StatusInternalServerError)
 		return
 	}
+
+	w.Header().Set(contentType, "text/html; charset=utf-8")
+	w.Write(buf.Bytes())
 }
 
 func (h *AppHandler) MetricsValue(w http.ResponseWriter, req *http.Request) {

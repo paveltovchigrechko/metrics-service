@@ -1,8 +1,13 @@
 package handler
 
-import "text/template"
+import (
+	"html/template"
+	"strconv"
 
-// AI-generated, as I couldn't figure out how to dereference pointers.
+	"github.com/paveltovchigrechko/metrics-service/internal/model"
+)
+
+// The template is parsed once at startup. It uses html/template, so metric names are HTML-escaped.
 const mainPageTpl = `
 <!DOCTYPE html>
 <html>
@@ -13,16 +18,9 @@ const mainPageTpl = `
     <h2>Welcome to the Metrics service</h2>
     {{if .}}
         <p>ID&nbsp;&nbsp;&nbsp;&nbsp;Value</p>
-        {{range .}}
-            <p>
-                {{.ID}}&nbsp;&nbsp;&nbsp;&nbsp;
-                {{if eq .MType "counter"}}
-                    {{derefInt .Delta}}
-                {{else if eq .MType "gauge"}}
-                    {{printf "%.2f" (derefFloat .Value)}}
-                {{end}}
-            </p>
-        {{end}}
+        {{- range .}}
+        <p>{{.ID}}&nbsp;&nbsp;&nbsp;&nbsp;{{.Value}}</p>
+        {{- end}}
     {{else}}
         <p>Currently there are no metrics to display</p>
     {{end}}
@@ -30,17 +28,44 @@ const mainPageTpl = `
 </html>
 `
 
-var templateFuncs = template.FuncMap{
-	"derefFloat": func(f *float64) float64 {
-		if f == nil {
-			return 0.0
+var mainPageTmpl = template.Must(template.New("mainpage").Parse(mainPageTpl))
+
+// metricRow is a metric prepared for the template: the value is already formatted,
+// so the template needs no function calls (which are slow, as they use reflection).
+type metricRow struct {
+	ID    string
+	Value string
+}
+
+func newMetricRows(metrics []model.Metrics) []metricRow {
+	rows := make([]metricRow, len(metrics))
+	for i := range metrics {
+		rows[i] = metricRow{
+			ID:    metrics[i].ID,
+			Value: formatValue(&metrics[i]),
 		}
-		return *f
-	},
-	"derefInt": func(i *int64) int64 {
-		if i == nil {
-			return 0
+	}
+
+	return rows
+}
+
+// formatValue formats the counter delta as an integer and the gauge value with two decimals.
+// A missing delta or value is shown as zero.
+func formatValue(m *model.Metrics) string {
+	switch m.MType {
+	case model.Counter:
+		var delta int64
+		if m.Delta != nil {
+			delta = *m.Delta
 		}
-		return *i
-	},
+		return strconv.FormatInt(delta, 10)
+	case model.Gauge:
+		var value float64
+		if m.Value != nil {
+			value = *m.Value
+		}
+		return strconv.FormatFloat(value, 'f', 2, 64)
+	}
+
+	return ""
 }

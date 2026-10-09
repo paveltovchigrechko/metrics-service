@@ -248,6 +248,56 @@ func TestMainPage(t *testing.T) {
 	})
 }
 
+func TestMainPage_Details(t *testing.T) {
+	render := func(t *testing.T, metrics []model.Metrics) string {
+		t.Helper()
+		mockStorage := &MockStorage{
+			OnGetAllMetrics: func(ctx context.Context) ([]model.Metrics, error) { return metrics, nil },
+		}
+		h := NewHandler(mockStorage, nil, nil, nil)
+		w := httptest.NewRecorder()
+		h.MainPage(w, httptest.NewRequest(http.MethodGet, "/", nil))
+		require.Equal(t, http.StatusOK, w.Code)
+
+		return w.Body.String()
+	}
+
+	t.Run("metric names are HTML-escaped", func(t *testing.T) {
+		body := render(t, []model.Metrics{{ID: "<script>alert(1)</script>", MType: model.Gauge, Value: ptr(1.0)}})
+		assert.NotContains(t, body, "<script>")
+		assert.Contains(t, body, "&lt;script&gt;")
+	})
+
+	t.Run("renders rows with formatted values", func(t *testing.T) {
+		body := render(t, []model.Metrics{
+			{ID: "G", MType: model.Gauge, Value: ptr(3.14159)},
+			{ID: "C", MType: model.Counter, Delta: ptr(int64(42))},
+		})
+		assert.Contains(t, body, "<p>G&nbsp;&nbsp;&nbsp;&nbsp;3.14</p>")
+		assert.Contains(t, body, "<p>C&nbsp;&nbsp;&nbsp;&nbsp;42</p>")
+	})
+
+	t.Run("missing delta and value are shown as zero", func(t *testing.T) {
+		body := render(t, []model.Metrics{
+			{ID: "G", MType: model.Gauge},
+			{ID: "C", MType: model.Counter},
+		})
+		assert.Contains(t, body, "<p>G&nbsp;&nbsp;&nbsp;&nbsp;0.00</p>")
+		assert.Contains(t, body, "<p>C&nbsp;&nbsp;&nbsp;&nbsp;0</p>")
+	})
+
+	t.Run("storage error returns 500 without partial body", func(t *testing.T) {
+		mockStorage := &MockStorage{
+			OnGetAllMetrics: func(ctx context.Context) ([]model.Metrics, error) { return nil, errors.New("boom") },
+		}
+		h := NewHandler(mockStorage, nil, nil, nil)
+		w := httptest.NewRecorder()
+		h.MainPage(w, httptest.NewRequest(http.MethodGet, "/", nil))
+		assert.Equal(t, http.StatusInternalServerError, w.Code)
+		assert.NotContains(t, w.Body.String(), "Welcome")
+	})
+}
+
 func TestMetricsValue(t *testing.T) {
 	tests := []struct {
 		name         string
