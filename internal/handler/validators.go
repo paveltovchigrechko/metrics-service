@@ -17,8 +17,11 @@ const (
 )
 
 var (
-	ErrInvalidMetricsValue    = errors.New("invalid metric value")
-	ErrInvalidRequestMethod   = errors.New("invalid request method")
+	// ErrInvalidMetricsValue means the value in the URL path cannot be parsed:
+	// a counter needs an integer, a gauge needs a float.
+	ErrInvalidMetricsValue = errors.New("invalid metric value")
+	// ErrUnsupportedContentType means the request Content-Type does not match
+	// the one the endpoint expects.
 	ErrUnsupportedContentType = errors.New("unsupported content type")
 )
 
