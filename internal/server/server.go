@@ -1,3 +1,6 @@
+// Package server assembles the metrics HTTP server: it picks the storage,
+// sets up audit, registers the routes from package handler and runs the
+// server with graceful shutdown.
 package server
 
 import (
@@ -34,6 +37,8 @@ const (
 	memoryMode
 )
 
+// Server is the metrics HTTP server. Create it with New, start it with Run,
+// and release its resources with StopAudit and then StopDB after Run returns.
 type Server struct {
 	cfg         *config.ServerConfig
 	handler     *handler.AppHandler
@@ -44,6 +49,20 @@ type Server struct {
 	auditCloser io.Closer // Flushes queued audit events; nil if audit is disabled.
 }
 
+// New creates a Server from the config. The storage is chosen by the first
+// setting that is present:
+//   - DatabaseDSN: PostgreSQL. New connects and runs the migrations.
+//   - FileStoragePath: in-memory storage saved to the file. With Restore the
+//     metrics are loaded from the file first; a missing file is not an error.
+//     With StoreInterval == 0 the file is saved after every update, otherwise
+//     Run saves it every StoreInterval.
+//   - Neither: in-memory storage only.
+//
+// If AuditFilePath or AuditURL is set, every successful update sends an audit
+// event there asynchronously.
+//
+// The middlewares wrap every route, in the order given. New returns an error
+// if the database or the storage file cannot be opened.
 func New(c *config.ServerConfig, middlewares ...func(http.Handler) http.Handler) (*Server, error) {
 	mode := defineMode(c)
 
@@ -117,8 +136,13 @@ func New(c *config.ServerConfig, middlewares ...func(http.Handler) http.Handler)
 	return s, nil
 }
 
-// Run serves HTTP requests until SIGINT/SIGTERM, then shuts down gracefully:
-// in-flight requests are finished and their audit events are flushed by StopAudit.
+// Run listens on ServerAddress and serves requests until the process gets
+// SIGINT or SIGTERM. Then it stops accepting connections and waits up to 5
+// seconds for in-flight requests to finish.
+//
+// Run returns nil after a clean shutdown, or the error that stopped the
+// listener or the shutdown. It does not flush audit events or close the
+// database; call StopAudit and StopDB for that.
 func (s *Server) Run() error {
 	if s.cfg.StoreInterval > 0 && s.fileStorage != nil {
 		go s.runStoreLoop() // Separate thread for time ticker
@@ -146,7 +170,9 @@ func (s *Server) Run() error {
 	return srv.Shutdown(shutdownCtx)
 }
 
-// StopAudit waits until all queued audit events are delivered.
+// StopAudit waits until all queued audit events are delivered and stops the
+// audit workers. Call it after Run returns, so no new events are queued.
+// It does nothing if audit is disabled.
 func (s *Server) StopAudit() error {
 	if s.auditCloser == nil {
 		return nil
@@ -155,6 +181,8 @@ func (s *Server) StopAudit() error {
 	return s.auditCloser.Close()
 }
 
+// StopDB closes the database connection. It does nothing if the server does
+// not use PostgreSQL.
 func (s *Server) StopDB() error {
 	if s.closer == nil { // Use storage(type).PostgresStorage.db
 		return nil
