@@ -99,7 +99,7 @@ func (h *AppHandler) PostMetrics(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	if err := h.audit(req, model.Metrics{ID: chi.URLParam(req, "metricsName")}); err != nil {
+	if err := h.audit(req, chi.URLParam(req, "metricsName")); err != nil {
 		log.Printf("audit: %v", err) // Audit failure must not fail the request.
 	}
 
@@ -208,7 +208,7 @@ func (h *AppHandler) UpdateEndpoint(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	if err := h.audit(req, *parsedMetrics); err != nil {
+	if err := h.audit(req, parsedMetrics.ID); err != nil {
 		log.Printf("audit: %v", err) // Audit failure must not fail the request.
 	}
 
@@ -264,7 +264,11 @@ func (h *AppHandler) UpdatesEndpoint(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	if err := h.audit(req, parsedMetrics...); err != nil {
+	metricNames := make([]string, 0, len(parsedMetrics))
+	for _, m := range parsedMetrics {
+		metricNames = append(metricNames, m.ID)
+	}
+	if err := h.audit(req, metricNames...); err != nil {
 		log.Printf("audit: %v", err) // Audit failure must not fail the request.
 	}
 
