@@ -27,6 +27,9 @@ import (
 const (
 	auditQueueSize  = 1024
 	shutdownTimeout = 5 * time.Second
+
+	readHeaderTimeout = 5 * time.Second
+	idleTimeout = 120 * time.Second
 )
 
 type storageMode int
@@ -146,6 +149,9 @@ func New(c *config.ServerConfig, middlewares ...func(http.Handler) http.Handler)
 // SIGINT or SIGTERM. Then it stops accepting connections and waits up to 5
 // seconds for in-flight requests to finish.
 //
+// A client must send the request headers within 5 seconds, and an idle
+// keep-alive connection is closed after 2 minutes.
+//
 // Run returns nil after a clean shutdown, or the error that stopped the
 // listener or the shutdown. It does not flush audit events or close the
 // database; call StopAudit and StopDB for that.
@@ -157,7 +163,12 @@ func (s *Server) Run() error {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	srv := &http.Server{Addr: s.cfg.ServerAddress, Handler: s.router}
+	srv := &http.Server{
+		Addr:              s.cfg.ServerAddress,
+		Handler:           s.router,
+		ReadHeaderTimeout: readHeaderTimeout,
+		IdleTimeout:       idleTimeout,
+	}
 
 	errCh := make(chan error, 1)
 	go func() {
