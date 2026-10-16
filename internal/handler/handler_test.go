@@ -10,7 +10,8 @@ import (
 	"testing"
 
 	"github.com/go-chi/chi/v5"
-	models "github.com/paveltovchigrechko/metrics-service/internal/model"
+	"github.com/paveltovchigrechko/metrics-service/internal/audit"
+	"github.com/paveltovchigrechko/metrics-service/internal/model"
 	"github.com/paveltovchigrechko/metrics-service/internal/repository"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -24,36 +25,36 @@ func ptr[T any](v T) *T {
 	return &v
 }
 
-// MockStorage implements models.Storage explicitly with context.Context as first argument.
+// MockStorage implements model.Storage explicitly with context.Context as first argument.
 type MockStorage struct {
-	OnGetMetrics    func(context.Context, string, string) (*models.Metrics, error)
-	OnSaveMetrics   func(context.Context, *models.Metrics) error
-	OnGetAllMetrics func(context.Context) ([]models.Metrics, error)
-	OnSaveBatch     func(context.Context, []models.Metrics) error
+	OnGetMetrics    func(context.Context, string, string) (*model.Metrics, error)
+	OnSaveMetrics   func(context.Context, *model.Metrics) error
+	OnGetAllMetrics func(context.Context) ([]model.Metrics, error)
+	OnSaveBatch     func(context.Context, []model.Metrics) error
 }
 
-func (m *MockStorage) GetMetrics(ctx context.Context, name, mtype string) (*models.Metrics, error) {
+func (m *MockStorage) GetMetrics(ctx context.Context, name, mtype string) (*model.Metrics, error) {
 	if m.OnGetMetrics != nil {
 		return m.OnGetMetrics(ctx, name, mtype)
 	}
 	return nil, nil
 }
 
-func (m *MockStorage) SaveMetrics(ctx context.Context, mt *models.Metrics) error {
+func (m *MockStorage) SaveMetrics(ctx context.Context, mt *model.Metrics) error {
 	if m.OnSaveMetrics != nil {
 		return m.OnSaveMetrics(ctx, mt)
 	}
 	return nil
 }
 
-func (m *MockStorage) GetAllMetrics(ctx context.Context) ([]models.Metrics, error) {
+func (m *MockStorage) GetAllMetrics(ctx context.Context) ([]model.Metrics, error) {
 	if m.OnGetAllMetrics != nil {
 		return m.OnGetAllMetrics(ctx)
 	}
 	return nil, nil
 }
 
-func (m *MockStorage) SaveBatch(ctx context.Context, metrics []models.Metrics) error {
+func (m *MockStorage) SaveBatch(ctx context.Context, metrics []model.Metrics) error {
 	if m.OnSaveBatch != nil {
 		return m.OnSaveBatch(ctx, metrics)
 	}
@@ -76,7 +77,7 @@ func newRequestWithChiParams(method, target string, params map[string]string) *h
 
 func TestNewHandler(t *testing.T) {
 	s := repository.NewMemStorage()
-	h := NewHandler(s, nil, nil)
+	h := NewHandler(s, nil, nil, nil)
 
 	assert.NotNil(t, h)
 	assert.NotNil(t, h.storage)
@@ -170,7 +171,7 @@ func TestPostMetrics(t *testing.T) {
 			if test.updateErr != nil {
 				updateFunc = func() error { return test.updateErr }
 			}
-			h := NewHandler(s, nil, updateFunc)
+			h := NewHandler(s, nil, updateFunc, nil)
 			r := chi.NewRouter()
 
 			r.Method(http.MethodPost, "/update/{metricsType}/{metricsName}/{metricsValue}", http.HandlerFunc(h.PostMetrics))
@@ -194,22 +195,22 @@ func TestPostMetrics(t *testing.T) {
 func TestMainPage(t *testing.T) {
 	t.Run("successfully renders html list", func(t *testing.T) {
 		mockStorage := &MockStorage{
-			OnGetAllMetrics: func(ctx context.Context) ([]models.Metrics, error) {
-				return []models.Metrics{
+			OnGetAllMetrics: func(ctx context.Context) ([]model.Metrics, error) {
+				return []model.Metrics{
 					{
 						ID:    "Alloc",
-						MType: models.Gauge,
+						MType: model.Gauge,
 						Value: ptr(100.00),
 					},
 					{
 						ID:    "PollCount",
-						MType: models.Counter,
+						MType: model.Counter,
 						Delta: ptr(int64(5)),
 					},
 				}, nil
 			},
 		}
-		h := NewHandler(mockStorage, nil, nil)
+		h := NewHandler(mockStorage, nil, nil, nil)
 
 		req := httptest.NewRequest(http.MethodGet, "/", nil)
 		w := httptest.NewRecorder()
@@ -231,11 +232,11 @@ func TestMainPage(t *testing.T) {
 
 	t.Run("renders empty state message when no metrics exist", func(t *testing.T) {
 		mockStorage := &MockStorage{
-			OnGetAllMetrics: func(ctx context.Context) ([]models.Metrics, error) {
-				return []models.Metrics{}, nil
+			OnGetAllMetrics: func(ctx context.Context) ([]model.Metrics, error) {
+				return []model.Metrics{}, nil
 			},
 		}
-		h := NewHandler(mockStorage, nil, nil)
+		h := NewHandler(mockStorage, nil, nil, nil)
 
 		req := httptest.NewRequest(http.MethodGet, "/", nil)
 		w := httptest.NewRecorder()
@@ -244,6 +245,56 @@ func TestMainPage(t *testing.T) {
 
 		assert.Equal(t, http.StatusOK, w.Code)
 		assert.Contains(t, w.Body.String(), "Currently there are no metrics to display")
+	})
+}
+
+func TestMainPage_Details(t *testing.T) {
+	render := func(t *testing.T, metrics []model.Metrics) string {
+		t.Helper()
+		mockStorage := &MockStorage{
+			OnGetAllMetrics: func(ctx context.Context) ([]model.Metrics, error) { return metrics, nil },
+		}
+		h := NewHandler(mockStorage, nil, nil, nil)
+		w := httptest.NewRecorder()
+		h.MainPage(w, httptest.NewRequest(http.MethodGet, "/", nil))
+		require.Equal(t, http.StatusOK, w.Code)
+
+		return w.Body.String()
+	}
+
+	t.Run("metric names are HTML-escaped", func(t *testing.T) {
+		body := render(t, []model.Metrics{{ID: "<script>alert(1)</script>", MType: model.Gauge, Value: ptr(1.0)}})
+		assert.NotContains(t, body, "<script>")
+		assert.Contains(t, body, "&lt;script&gt;")
+	})
+
+	t.Run("renders rows with formatted values", func(t *testing.T) {
+		body := render(t, []model.Metrics{
+			{ID: "G", MType: model.Gauge, Value: ptr(3.14159)},
+			{ID: "C", MType: model.Counter, Delta: ptr(int64(42))},
+		})
+		assert.Contains(t, body, "<p>G&nbsp;&nbsp;&nbsp;&nbsp;3.14</p>")
+		assert.Contains(t, body, "<p>C&nbsp;&nbsp;&nbsp;&nbsp;42</p>")
+	})
+
+	t.Run("missing delta and value are shown as zero", func(t *testing.T) {
+		body := render(t, []model.Metrics{
+			{ID: "G", MType: model.Gauge},
+			{ID: "C", MType: model.Counter},
+		})
+		assert.Contains(t, body, "<p>G&nbsp;&nbsp;&nbsp;&nbsp;0.00</p>")
+		assert.Contains(t, body, "<p>C&nbsp;&nbsp;&nbsp;&nbsp;0</p>")
+	})
+
+	t.Run("storage error returns 500 without partial body", func(t *testing.T) {
+		mockStorage := &MockStorage{
+			OnGetAllMetrics: func(ctx context.Context) ([]model.Metrics, error) { return nil, errors.New("boom") },
+		}
+		h := NewHandler(mockStorage, nil, nil, nil)
+		w := httptest.NewRecorder()
+		h.MainPage(w, httptest.NewRequest(http.MethodGet, "/", nil))
+		assert.Equal(t, http.StatusInternalServerError, w.Code)
+		assert.NotContains(t, w.Body.String(), "Welcome")
 	})
 }
 
@@ -263,8 +314,8 @@ func TestMetricsValue(t *testing.T) {
 			},
 			mockStorage: func() repository.Storage {
 				m := &MockStorage{}
-				m.OnGetMetrics = func(ctx context.Context, name, mtype string) (*models.Metrics, error) {
-					return &models.Metrics{ID: "PollCount", MType: "counter", Delta: ptr(int64(45))}, nil
+				m.OnGetMetrics = func(ctx context.Context, name, mtype string) (*model.Metrics, error) {
+					return &model.Metrics{ID: "PollCount", MType: "counter", Delta: ptr(int64(45))}, nil
 				}
 				return m
 			},
@@ -279,8 +330,8 @@ func TestMetricsValue(t *testing.T) {
 			},
 			mockStorage: func() repository.Storage {
 				m := &MockStorage{}
-				m.OnGetMetrics = func(ctx context.Context, name, mtype string) (*models.Metrics, error) {
-					return &models.Metrics{ID: "Alloc", MType: "gauge", Value: ptr(1234.56)}, nil
+				m.OnGetMetrics = func(ctx context.Context, name, mtype string) (*model.Metrics, error) {
+					return &model.Metrics{ID: "Alloc", MType: "gauge", Value: ptr(1234.56)}, nil
 				}
 				return m
 			},
@@ -295,7 +346,7 @@ func TestMetricsValue(t *testing.T) {
 			},
 			mockStorage: func() repository.Storage {
 				m := &MockStorage{}
-				m.OnGetMetrics = func(ctx context.Context, name, mtype string) (*models.Metrics, error) {
+				m.OnGetMetrics = func(ctx context.Context, name, mtype string) (*model.Metrics, error) {
 					return nil, errors.New("not found")
 				}
 				return m
@@ -306,7 +357,7 @@ func TestMetricsValue(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			h := NewHandler(tt.mockStorage(), nil, nil)
+			h := NewHandler(tt.mockStorage(), nil, nil, nil)
 			req := newRequestWithChiParams(http.MethodGet, "/", tt.params)
 			w := httptest.NewRecorder()
 
@@ -374,7 +425,7 @@ func TestUpdateEndpoint(t *testing.T) {
 			if tt.updateErr != nil {
 				updateFunc = func() error { return tt.updateErr }
 			}
-			h := NewHandler(s, nil, updateFunc)
+			h := NewHandler(s, nil, updateFunc, nil)
 
 			req := httptest.NewRequest(http.MethodPost, "/update", strings.NewReader(tt.body))
 			if tt.contentType != "" {
@@ -404,7 +455,7 @@ func TestUpdatesEndpoint(t *testing.T) {
 			body:        `[{"id":"PollCount","type":"counter","delta":10}]`,
 			setupStorage: func() repository.Storage {
 				m := &MockStorage{}
-				m.OnSaveBatch = func(ctx context.Context, metrics []models.Metrics) error {
+				m.OnSaveBatch = func(ctx context.Context, metrics []model.Metrics) error {
 					return nil
 				}
 				return m
@@ -426,8 +477,8 @@ func TestUpdatesEndpoint(t *testing.T) {
 			body:        `[{"id":"BadCounter","type":"counter"}]`,
 			setupStorage: func() repository.Storage {
 				m := &MockStorage{}
-				m.OnSaveBatch = func(ctx context.Context, metrics []models.Metrics) error {
-					return models.ErrDeltaIsNil
+				m.OnSaveBatch = func(ctx context.Context, metrics []model.Metrics) error {
+					return model.ErrDeltaIsNil
 				}
 				return m
 			},
@@ -439,7 +490,7 @@ func TestUpdatesEndpoint(t *testing.T) {
 			body:        `[{"id":"PollCount","type":"counter","delta":10}]`,
 			setupStorage: func() repository.Storage {
 				m := &MockStorage{}
-				m.OnSaveBatch = func(ctx context.Context, metrics []models.Metrics) error {
+				m.OnSaveBatch = func(ctx context.Context, metrics []model.Metrics) error {
 					return errors.New("database connection lost")
 				}
 				return m
@@ -450,7 +501,7 @@ func TestUpdatesEndpoint(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			h := NewHandler(tt.setupStorage(), nil, nil)
+			h := NewHandler(tt.setupStorage(), nil, nil, nil)
 
 			req := httptest.NewRequest(http.MethodPost, "/updates", strings.NewReader(tt.body))
 			if tt.contentType != "" {
@@ -480,8 +531,8 @@ func TestValueEndpoint(t *testing.T) {
 			body:        `{"id": "PollCount", "type": "counter"}`,
 			setupStorage: func() repository.Storage {
 				m := &MockStorage{}
-				m.OnGetMetrics = func(ctx context.Context, name, mtype string) (*models.Metrics, error) {
-					return &models.Metrics{ID: "PollCount", MType: "counter", Delta: ptr(int64(42))}, nil
+				m.OnGetMetrics = func(ctx context.Context, name, mtype string) (*model.Metrics, error) {
+					return &model.Metrics{ID: "PollCount", MType: "counter", Delta: ptr(int64(42))}, nil
 				}
 				return m
 			},
@@ -494,8 +545,8 @@ func TestValueEndpoint(t *testing.T) {
 			body:        `{"id": "Alloc", "type": "gauge"}`,
 			setupStorage: func() repository.Storage {
 				m := &MockStorage{}
-				m.OnGetMetrics = func(ctx context.Context, name, mtype string) (*models.Metrics, error) {
-					return &models.Metrics{ID: "Alloc", MType: "gauge", Value: ptr(12.34)}, nil
+				m.OnGetMetrics = func(ctx context.Context, name, mtype string) (*model.Metrics, error) {
+					return &model.Metrics{ID: "Alloc", MType: "gauge", Value: ptr(12.34)}, nil
 				}
 				return m
 			},
@@ -508,7 +559,7 @@ func TestValueEndpoint(t *testing.T) {
 			body:        `{"id": "Missing", "type": "gauge"}`,
 			setupStorage: func() repository.Storage {
 				m := &MockStorage{}
-				m.OnGetMetrics = func(ctx context.Context, name, mtype string) (*models.Metrics, error) {
+				m.OnGetMetrics = func(ctx context.Context, name, mtype string) (*model.Metrics, error) {
 					return nil, errors.New("not found")
 				}
 				return m
@@ -530,8 +581,8 @@ func TestValueEndpoint(t *testing.T) {
 			body:        `{"id": "Alloc", "type": "counter"}`, // requesting counter
 			setupStorage: func() repository.Storage {
 				m := &MockStorage{}
-				m.OnGetMetrics = func(ctx context.Context, name, mtype string) (*models.Metrics, error) {
-					return &models.Metrics{ID: "Alloc", MType: "gauge", Value: ptr(12.34)}, nil // returns gauge
+				m.OnGetMetrics = func(ctx context.Context, name, mtype string) (*model.Metrics, error) {
+					return &model.Metrics{ID: "Alloc", MType: "gauge", Value: ptr(12.34)}, nil // returns gauge
 				}
 				return m
 			},
@@ -541,7 +592,7 @@ func TestValueEndpoint(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			h := NewHandler(tt.setupStorage(), nil, nil)
+			h := NewHandler(tt.setupStorage(), nil, nil, nil)
 
 			req := httptest.NewRequest(http.MethodPost, "/value", strings.NewReader(tt.body))
 			if tt.contentType != "" {
@@ -571,7 +622,7 @@ func TestAppHandler_PingEndpoint(t *testing.T) {
 			Return(nil).
 			Times(1)
 
-		h := NewHandler(nil, mockPinger, nil)
+		h := NewHandler(nil, mockPinger, nil, nil)
 
 		req := httptest.NewRequest(http.MethodGet, "/ping", nil)
 		rec := httptest.NewRecorder()
@@ -592,7 +643,7 @@ func TestAppHandler_PingEndpoint(t *testing.T) {
 			Return(errors.New("connection refused")).
 			Times(1)
 
-		h := NewHandler(nil, mockPinger, nil)
+		h := NewHandler(nil, mockPinger, nil, nil)
 
 		req := httptest.NewRequest(http.MethodGet, "/ping", nil)
 		rec := httptest.NewRecorder()
@@ -604,7 +655,7 @@ func TestAppHandler_PingEndpoint(t *testing.T) {
 	})
 
 	t.Run("returns 500 Internal Server Error when pinger is nil", func(t *testing.T) {
-		h := NewHandler(nil, nil, nil)
+		h := NewHandler(nil, nil, nil, nil)
 
 		req := httptest.NewRequest(http.MethodGet, "/ping", nil)
 		rec := httptest.NewRecorder()
@@ -624,7 +675,7 @@ func TestProcessMetrics(t *testing.T) {
 		expectedType string
 		expectErr    bool
 		expectSaved  bool
-		verify       func(t *testing.T, m *models.Metrics)
+		verify       func(t *testing.T, m *model.Metrics)
 	}{
 		{
 			name: "processes valid counter metric successfully",
@@ -637,7 +688,7 @@ func TestProcessMetrics(t *testing.T) {
 			expectedType: "counter",
 			expectErr:    false,
 			expectSaved:  true,
-			verify: func(t *testing.T, m *models.Metrics) {
+			verify: func(t *testing.T, m *model.Metrics) {
 				assert.Equal(t, "counter", m.MType)
 				assert.Equal(t, int64(77), *m.Delta)
 				assert.Nil(t, m.Value)
@@ -654,7 +705,7 @@ func TestProcessMetrics(t *testing.T) {
 			expectedType: "gauge",
 			expectErr:    false,
 			expectSaved:  true,
-			verify: func(t *testing.T, m *models.Metrics) {
+			verify: func(t *testing.T, m *model.Metrics) {
 				assert.Equal(t, "gauge", m.MType)
 				assert.Equal(t, 77.76, *m.Value)
 				assert.Nil(t, m.Delta)
@@ -678,7 +729,7 @@ func TestProcessMetrics(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			s := repository.NewMemStorage()
-			h := NewHandler(s, nil, nil)
+			h := NewHandler(s, nil, nil, nil)
 
 			err := h.processMetrics(tc.req)
 
@@ -706,7 +757,7 @@ func TestParseMetrics(t *testing.T) {
 		name      string
 		req       *http.Request
 		expectErr bool
-		verify    func(t *testing.T, result *models.Metrics)
+		verify    func(t *testing.T, result *model.Metrics)
 	}{
 		{
 			name: "successfully parses counter metrics",
@@ -716,7 +767,7 @@ func TestParseMetrics(t *testing.T) {
 				"metricsValue": "77",
 			}),
 			expectErr: false,
-			verify: func(t *testing.T, result *models.Metrics) {
+			verify: func(t *testing.T, result *model.Metrics) {
 				require.NotNil(t, result)
 				assert.Equal(t, "counter-name", result.ID)
 				assert.Equal(t, "counter", result.MType)
@@ -732,7 +783,7 @@ func TestParseMetrics(t *testing.T) {
 				"metricsValue": "77.76",
 			}),
 			expectErr: false,
-			verify: func(t *testing.T, result *models.Metrics) {
+			verify: func(t *testing.T, result *model.Metrics) {
 				require.NotNil(t, result)
 				assert.Equal(t, "gauge-name", result.ID)
 				assert.Equal(t, "gauge", result.MType)
@@ -748,7 +799,7 @@ func TestParseMetrics(t *testing.T) {
 				"metricsValue": "12.34",
 			}),
 			expectErr: true,
-			verify: func(t *testing.T, result *models.Metrics) {
+			verify: func(t *testing.T, result *model.Metrics) {
 				assert.Nil(t, result)
 			},
 		},
@@ -760,7 +811,7 @@ func TestParseMetrics(t *testing.T) {
 				"metricsValue": "not-a-number",
 			}),
 			expectErr: true,
-			verify: func(t *testing.T, result *models.Metrics) {
+			verify: func(t *testing.T, result *model.Metrics) {
 				assert.Nil(t, result)
 			},
 		},
@@ -785,13 +836,13 @@ func TestDecodeJSONMetrics(t *testing.T) {
 		name      string
 		body      string
 		expectErr bool
-		verify    func(t *testing.T, m *models.Metrics)
+		verify    func(t *testing.T, m *model.Metrics)
 	}{
 		{
 			name:      "decode completely valid gauge struct",
 			body:      `{"id":"Alloc","type":"gauge","value":54.12}`,
 			expectErr: false,
-			verify: func(t *testing.T, m *models.Metrics) {
+			verify: func(t *testing.T, m *model.Metrics) {
 				require.NotNil(t, m)
 				assert.Equal(t, "Alloc", m.ID)
 				assert.Equal(t, "gauge", m.MType)
@@ -830,19 +881,19 @@ func TestDecodeJSONBatch(t *testing.T) {
 		name      string
 		body      string
 		expectErr bool
-		verify    func(t *testing.T, metrics []models.Metrics)
+		verify    func(t *testing.T, metrics []model.Metrics)
 	}{
 		{
 			name:      "decode valid batch of metrics",
 			body:      `[{"id":"Alloc","type":"gauge","value":54.12},{"id":"PollCount","type":"counter","delta":5}]`,
 			expectErr: false,
-			verify: func(t *testing.T, metrics []models.Metrics) {
+			verify: func(t *testing.T, metrics []model.Metrics) {
 				require.Len(t, metrics, 2)
 				assert.Equal(t, "Alloc", metrics[0].ID)
-				assert.Equal(t, models.Gauge, metrics[0].MType)
+				assert.Equal(t, model.Gauge, metrics[0].MType)
 				assert.Equal(t, 54.12, *metrics[0].Value)
 				assert.Equal(t, "PollCount", metrics[1].ID)
-				assert.Equal(t, models.Counter, metrics[1].MType)
+				assert.Equal(t, model.Counter, metrics[1].MType)
 				assert.Equal(t, int64(5), *metrics[1].Delta)
 			},
 		},
@@ -871,4 +922,63 @@ func TestDecodeJSONBatch(t *testing.T) {
 			}
 		})
 	}
+}
+
+type fakeNotifier struct{ events []*audit.Event }
+
+func (f *fakeNotifier) Notify(e *audit.Event) error {
+	f.events = append(f.events, e)
+	return nil
+}
+
+type failingNotifier struct{}
+
+func (failingNotifier) Notify(*audit.Event) error { return errors.New("audit down") }
+
+func TestAuditEvents(t *testing.T) {
+	newReq := func(target, ctype, body string) *http.Request {
+		req := httptest.NewRequest(http.MethodPost, target, strings.NewReader(body))
+		req.Header.Set("Content-Type", ctype)
+		req.RemoteAddr = "192.168.0.42:5555"
+		return req
+	}
+
+	t.Run("json update", func(t *testing.T) {
+		n := &fakeNotifier{}
+		h := NewHandler(repository.NewMemStorage(), nil, nil, n)
+		rec := httptest.NewRecorder()
+		h.UpdateEndpoint(rec, newReq("/update", "application/json", `{"id":"Alloc","type":"gauge","value":1.5}`))
+		require.Equal(t, http.StatusOK, rec.Code)
+		require.Len(t, n.events, 1)
+		assert.Equal(t, []string{"Alloc"}, n.events[0].Metrics)
+		assert.Equal(t, "192.168.0.42", n.events[0].IP)
+		assert.NotZero(t, n.events[0].TS)
+	})
+
+	t.Run("json batch", func(t *testing.T) {
+		n := &fakeNotifier{}
+		h := NewHandler(repository.NewMemStorage(), nil, nil, n)
+		rec := httptest.NewRecorder()
+		h.UpdatesEndpoint(rec, newReq("/updates", "application/json",
+			`[{"id":"Alloc","type":"gauge","value":1.5},{"id":"PollCount","type":"counter","delta":1}]`))
+		require.Equal(t, http.StatusOK, rec.Code)
+		require.Len(t, n.events, 1)
+		assert.Equal(t, []string{"Alloc", "PollCount"}, n.events[0].Metrics)
+	})
+
+	t.Run("notifier error does not fail the request", func(t *testing.T) {
+		h := NewHandler(repository.NewMemStorage(), nil, nil, failingNotifier{})
+		rec := httptest.NewRecorder()
+		h.UpdateEndpoint(rec, newReq("/update", "application/json", `{"id":"Alloc","type":"gauge","value":1.5}`))
+		assert.Equal(t, http.StatusOK, rec.Code)
+	})
+
+	t.Run("no event on invalid request", func(t *testing.T) {
+		n := &fakeNotifier{}
+		h := NewHandler(repository.NewMemStorage(), nil, nil, n)
+		rec := httptest.NewRecorder()
+		h.UpdateEndpoint(rec, newReq("/update", "application/json", `{"id":"Alloc","type":"bad"}`))
+		assert.Equal(t, http.StatusBadRequest, rec.Code)
+		assert.Empty(t, n.events)
+	})
 }

@@ -10,41 +10,47 @@ import (
 
 func TestSetServerConfig_Positive(t *testing.T) {
 	testCases := []struct {
-		name         string
-		args         []string
-		envVars      map[string]string
-		wantAddr     string
-		wantInterval time.Duration
-		wantPath     string
-		wantRestore  bool
-		wantDSN      string
-		wantKey      string
+		name              string
+		args              []string
+		envVars           map[string]string
+		wantAddr          string
+		wantInterval      time.Duration
+		wantPath          string
+		wantRestore       bool
+		wantDSN           string
+		wantKey           string
+		wantAuditFilePath string
+		wantAuditURL      string
 	}{
 		{
-			name:         "Default values when no env or flags are set",
-			args:         []string{},
-			envVars:      map[string]string{},
-			wantAddr:     "localhost:8080",
-			wantInterval: 300 * time.Second,
-			wantPath:     "metrics.json",
-			wantRestore:  true,
-			wantDSN:      "",
-			wantKey:      "",
+			name:              "Default values when no env or flags are set",
+			args:              []string{},
+			envVars:           map[string]string{},
+			wantAddr:          "localhost:8080",
+			wantInterval:      300 * time.Second,
+			wantPath:          "metrics.json",
+			wantRestore:       true,
+			wantDSN:           "",
+			wantKey:           "",
+			wantAuditFilePath: "",
+			wantAuditURL:      "",
 		},
 		{
-			name:         "Flags are parsed correctly when no env is present",
-			args:         []string{"-a", "127.0.0.1:9090", "-i", "10", "-f", "test.json", "-r=false", "-d", "db_address", "-k", "key"},
-			envVars:      map[string]string{},
-			wantAddr:     "127.0.0.1:9090",
-			wantInterval: 10 * time.Second,
-			wantPath:     "test.json",
-			wantRestore:  false,
-			wantDSN:      "db_address",
-			wantKey:      "key",
+			name:              "Flags are parsed correctly when no env is present",
+			args:              []string{"-a", "127.0.0.1:9090", "-i", "10", "-f", "test.json", "-r=false", "-d", "db_address", "-k", "key", "--audit-file", "audit-file-path", "--audit-url", "audit-url"},
+			envVars:           map[string]string{},
+			wantAddr:          "127.0.0.1:9090",
+			wantInterval:      10 * time.Second,
+			wantPath:          "test.json",
+			wantRestore:       false,
+			wantDSN:           "db_address",
+			wantKey:           "key",
+			wantAuditFilePath: "audit-file-path",
+			wantAuditURL:      "audit-url",
 		},
 		{
 			name: "Env variables override flags completely",
-			args: []string{"-a", "127.0.0.1:9090", "-i", "10", "-f", "test.json", "-r=false", "-d", "db_address", "-k", "key"},
+			args: []string{"-a", "127.0.0.1:9090", "-i", "10", "-f", "test.json", "-r=false", "-d", "db_address", "-k", "key", "--audit-file", "audit-file-path", "--audit-url", "audit-url"},
 			envVars: map[string]string{
 				"ADDRESS":           "0.0.0.0:3000",
 				"STORE_INTERVAL":    "15",
@@ -52,26 +58,32 @@ func TestSetServerConfig_Positive(t *testing.T) {
 				"RESTORE":           "true",
 				"DATABASE_DSN":      "env_db_address",
 				"KEY":               "env key",
+				"AUDIT_FILE":        "env_audit-file-path",
+				"AUDIT_URL":         "env_audit-url",
 			},
-			wantAddr:     "0.0.0.0:3000",
-			wantInterval: 15 * time.Second,
-			wantPath:     "env.json",
-			wantRestore:  true,
-			wantDSN:      "env_db_address",
-			wantKey:      "env key",
+			wantAddr:          "0.0.0.0:3000",
+			wantInterval:      15 * time.Second,
+			wantPath:          "env.json",
+			wantRestore:       true,
+			wantDSN:           "env_db_address",
+			wantKey:           "env key",
+			wantAuditFilePath: "env_audit-file-path",
+			wantAuditURL:      "env_audit-url",
 		},
 		{
 			name: "Partial Env overrides only specific flags",
-			args: []string{"-a", "127.0.0.1:9090", "-i", "10", "-d", "flag_db_address", "-k", "key"},
+			args: []string{"-a", "127.0.0.1:9090", "-i", "10", "-d", "flag_db_address", "-k", "key", "--audit-file", "audit-file-path", "--audit-url", "audit-url"},
 			envVars: map[string]string{
 				"ADDRESS": "0.0.0.0:3000",
 			},
-			wantAddr:     "0.0.0.0:3000",
-			wantInterval: 10 * time.Second,
-			wantPath:     "metrics.json",
-			wantRestore:  true,
-			wantDSN:      "flag_db_address",
-			wantKey:      "key",
+			wantAddr:          "0.0.0.0:3000",
+			wantInterval:      10 * time.Second,
+			wantPath:          "metrics.json",
+			wantRestore:       true,
+			wantDSN:           "flag_db_address",
+			wantKey:           "key",
+			wantAuditFilePath: "audit-file-path",
+			wantAuditURL:      "audit-url",
 		},
 	}
 
@@ -84,6 +96,8 @@ func TestSetServerConfig_Positive(t *testing.T) {
 			t.Setenv("RESTORE", "")
 			t.Setenv("DATABASE_DSN", "")
 			t.Setenv("KEY", "")
+			t.Setenv("AUDIT_FILE", "")
+			t.Setenv("AUDIT_URL", "")
 
 			for k, v := range tc.envVars {
 				t.Setenv(k, v)
@@ -99,6 +113,8 @@ func TestSetServerConfig_Positive(t *testing.T) {
 			assert.Equal(t, tc.wantRestore, cfg.Restore)
 			assert.Equal(t, tc.wantDSN, cfg.DatabaseDSN)
 			assert.Equal(t, tc.wantKey, cfg.Key)
+			assert.Equal(t, tc.wantAuditFilePath, cfg.AuditFilePath)
+			assert.Equal(t, tc.wantAuditURL, cfg.AuditURL)
 		})
 	}
 }
@@ -141,7 +157,7 @@ func TestSetServerConfig_Negative(t *testing.T) {
 
 func TestCreateServerFlagConfig(t *testing.T) {
 	t.Run("should parse custom flags successfully", func(t *testing.T) {
-		args := []string{"-a", "127.0.0.1:4444", "-i", "120", "-f", "flag_test.json", "-r=false", "-d", "db_address", "-k", "key"}
+		args := []string{"-a", "127.0.0.1:4444", "-i", "120", "-f", "flag_test.json", "-r=false", "-d", "db_address", "-k", "key", "--audit-file", "audit-file-path", "--audit-url", "audit-url"}
 		cfg, err := createServerFlagConfig(args)
 
 		require.NoError(t, err)
@@ -152,6 +168,8 @@ func TestCreateServerFlagConfig(t *testing.T) {
 		assert.False(t, cfg.Restore)
 		assert.Equal(t, "db_address", cfg.DatabaseDSN)
 		assert.Equal(t, "key", cfg.Key)
+		assert.Equal(t, "audit-file-path", cfg.AuditFilePath)
+		assert.Equal(t, "audit-url", cfg.AuditURL)
 	})
 
 	t.Run("should return error on invalid flags", func(t *testing.T) {
@@ -170,7 +188,9 @@ func TestCreateEnvConfig(t *testing.T) {
 		t.Setenv("FILE_STORAGE_PATH", "env_test.json")
 		t.Setenv("RESTORE", "false")
 		t.Setenv("DATABASE_DSN", "env_db_address")
-		t.Setenv("KEY", "env key")
+		t.Setenv("KEY", "env_key")
+		t.Setenv("AUDIT_FILE", "env_audit-file")
+		t.Setenv("AUDIT_URL", "env_audit-url")
 
 		envCfg, err := parseEnvServerConfig()
 
@@ -182,7 +202,9 @@ func TestCreateEnvConfig(t *testing.T) {
 		assert.Equal(t, "env_test.json", *envCfg.FileStoragePath)
 		assert.False(t, *envCfg.Restore)
 		assert.Equal(t, "env_db_address", *envCfg.DatabaseDSN)
-		assert.Equal(t, "env key", *envCfg.Key)
+		assert.Equal(t, "env_key", *envCfg.Key)
+		assert.Equal(t, "env_audit-file", *envCfg.AuditFilePath)
+		assert.Equal(t, "env_audit-url", *envCfg.AuditURL)
 	})
 
 	t.Run("should succeed when no env vars are defined (pointers are nil)", func(t *testing.T) {
@@ -192,6 +214,8 @@ func TestCreateEnvConfig(t *testing.T) {
 		t.Setenv("RESTORE", "")
 		t.Setenv("DATABASE_DSN", "")
 		t.Setenv("KEY", "")
+		t.Setenv("AUDIT_FILE", "")
+		t.Setenv("AUDIT_URL", "")
 
 		envCfg, err := parseEnvServerConfig()
 
@@ -203,15 +227,12 @@ func TestCreateEnvConfig(t *testing.T) {
 		assert.Nil(t, envCfg.Restore)
 		assert.Nil(t, envCfg.DatabaseDSN)
 		assert.Nil(t, envCfg.Key)
+		assert.Nil(t, envCfg.AuditFilePath)
+		assert.Nil(t, envCfg.AuditURL)
 	})
 }
 
 func TestMergeConfigs(t *testing.T) {
-	// Helper to quickly allocate string/int/bool pointers
-	strPtr := func(s string) *string { return &s }
-	intPtr := func(i int) *int { return &i }
-	boolPtr := func(b bool) *bool { return &b }
-
 	t.Run("should overwrite flag config with env values", func(t *testing.T) {
 		flagCfg := &ServerConfig{
 			ServerAddress:   "flag-address:8080",
@@ -220,15 +241,19 @@ func TestMergeConfigs(t *testing.T) {
 			Restore:         true,
 			DatabaseDSN:     "flag_db_address",
 			Key:             "key",
+			AuditFilePath:   "audit-file-path",
+			AuditURL:        "audit-url",
 		}
 
 		envCfg := &envServerConfig{
-			ServerAddress:   strPtr("env-address:9090"),
-			StoreInterval:   intPtr(50),
-			FileStoragePath: strPtr("env-file.json"),
-			Restore:         boolPtr(false),
-			DatabaseDSN:     strPtr("env_db_address"),
-			Key:             strPtr("env key"),
+			ServerAddress:   new("env-address:9090"),
+			StoreInterval:   new(50),
+			FileStoragePath: new("env-file.json"),
+			Restore:         new(false),
+			DatabaseDSN:     new("env_db_address"),
+			Key:             new("env_key"),
+			AuditFilePath:   new("env_audit-file-path"),
+			AuditURL:        new("env_audit-url"),
 		}
 
 		merged := mergeServerConfigs(envCfg, flagCfg)
@@ -239,7 +264,9 @@ func TestMergeConfigs(t *testing.T) {
 		assert.Equal(t, "env-file.json", merged.FileStoragePath)
 		assert.False(t, merged.Restore)
 		assert.Equal(t, "env_db_address", merged.DatabaseDSN)
-		assert.Equal(t, "env key", merged.Key)
+		assert.Equal(t, "env_key", merged.Key)
+		assert.Equal(t, "env_audit-file-path", merged.AuditFilePath)
+		assert.Equal(t, "env_audit-url", merged.AuditURL)
 	})
 
 	t.Run("should retain flag config values if env pointers are nil", func(t *testing.T) {
@@ -250,6 +277,8 @@ func TestMergeConfigs(t *testing.T) {
 			Restore:         true,
 			DatabaseDSN:     "flag_db_address",
 			Key:             "key",
+			AuditFilePath:   "audit-file-path",
+			AuditURL:        "audit-url",
 		}
 
 		envCfg := &envServerConfig{
@@ -259,6 +288,8 @@ func TestMergeConfigs(t *testing.T) {
 			Restore:         nil,
 			DatabaseDSN:     nil,
 			Key:             nil,
+			AuditFilePath:   nil,
+			AuditURL:        nil,
 		}
 
 		merged := mergeServerConfigs(envCfg, flagCfg)
@@ -270,5 +301,7 @@ func TestMergeConfigs(t *testing.T) {
 		assert.True(t, merged.Restore)
 		assert.Equal(t, "flag_db_address", merged.DatabaseDSN)
 		assert.Equal(t, "key", merged.Key)
+		assert.Equal(t, "audit-file-path", merged.AuditFilePath)
+		assert.Equal(t, "audit-url", merged.AuditURL)
 	})
 }

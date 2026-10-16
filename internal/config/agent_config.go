@@ -76,14 +76,14 @@ func mergeAgentConfigs(envCfg *envAgentConfig, flagCfg *AgentConfig) *AgentConfi
 
 	// Set report interval
 	if envCfg.ReportInterval != nil {
-		reportIntervalSeconds := time.Duration(*envCfg.ReportInterval) * time.Second
-		flagCfg.ReportInterval = reportIntervalSeconds
+		reportInterval := time.Duration(*envCfg.ReportInterval) * time.Second
+		flagCfg.ReportInterval = reportInterval
 	}
 
 	// Set poll interval
 	if envCfg.PollInterval != nil {
-		pollIntervalSeconds := time.Duration(*envCfg.PollInterval) * time.Second
-		flagCfg.PollInterval = pollIntervalSeconds
+		pollInterval := time.Duration(*envCfg.PollInterval) * time.Second
+		flagCfg.PollInterval = pollInterval
 	}
 
 	// Set key

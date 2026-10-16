@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5"
-	models "github.com/paveltovchigrechko/metrics-service/internal/model"
+	"github.com/paveltovchigrechko/metrics-service/internal/model"
 )
 
 const (
@@ -17,15 +17,18 @@ const (
 )
 
 var (
-	ErrInvalidMetricsValue    = errors.New("Invalid metric value")
-	ErrInvalidRequestMethod   = errors.New("Invalid request method")
-	ErrUnsupportedContentType = errors.New("Unsupported content type")
+	// ErrInvalidMetricsValue means the value in the URL path cannot be parsed:
+	// a counter needs an integer, a gauge needs a float.
+	ErrInvalidMetricsValue = errors.New("invalid metric value")
+	// ErrUnsupportedContentType means the request Content-Type does not match
+	// the one the endpoint expects.
+	ErrUnsupportedContentType = errors.New("unsupported content type")
 )
 
 func validateMetricsType(req *http.Request) error {
 	metricsType := chi.URLParam(req, "metricsType")
-	if metricsType != models.Counter && metricsType != models.Gauge {
-		return models.ErrUnknownMetricsType
+	if metricsType != model.Counter && metricsType != model.Gauge {
+		return model.ErrUnknownMetricsType
 	}
 
 	return nil
@@ -35,14 +38,14 @@ func validateMetricsValue(req *http.Request) error {
 	metricsType := chi.URLParam(req, "metricsType")
 	metricsValue := chi.URLParam(req, "metricsValue")
 
-	if metricsType == models.Counter { // Expect int64 value for this type.
+	if metricsType == model.Counter { // Expect int64 value for this type.
 		_, err := strconv.ParseInt(metricsValue, 10, 64)
 		if err != nil {
 			return ErrInvalidMetricsValue
 		}
 	}
 
-	if metricsType == models.Gauge { // Expect float64 value for this type.
+	if metricsType == model.Gauge { // Expect float64 value for this type.
 		_, err := strconv.ParseFloat(metricsValue, 64)
 		if err != nil {
 			return ErrInvalidMetricsValue

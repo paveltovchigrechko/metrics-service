@@ -18,7 +18,6 @@ import (
 	"github.com/paveltovchigrechko/metrics-service/internal/config"
 	"github.com/paveltovchigrechko/metrics-service/internal/hashing"
 	"github.com/paveltovchigrechko/metrics-service/internal/model"
-	models "github.com/paveltovchigrechko/metrics-service/internal/model"
 	"github.com/shirou/gopsutil/v4/cpu"
 	"github.com/shirou/gopsutil/v4/mem"
 )
@@ -83,11 +82,7 @@ func NewAgent(cfg *config.AgentConfig) *Agent {
 		SetRetryWaitTime(1 * time.Second).
 		SetRetryMaxWaitTime(5 * time.Second).
 		AddRetryCondition(func(r *resty.Response, err error) bool {
-			if err != nil {
-				return true
-			}
-
-			return false
+			return err != nil
 		})
 
 	return &Agent{
@@ -242,229 +237,229 @@ func (a *Agent) updatePSUMetrics() error {
 }
 
 type MetricDescriptor struct {
-	Get func(*Agent) *models.Metrics
+	Get func(*Agent) *model.Metrics
 }
 
 var metricsRegistry = []MetricDescriptor{
 	{
-		Get: func(a *Agent) *models.Metrics {
+		Get: func(a *Agent) *model.Metrics {
 			value := float64(a.Alloc)
-			m, _ := models.CreateMetrics("Alloc", models.Gauge, 0, value)
+			m, _ := model.CreateMetrics("Alloc", model.Gauge, 0, value)
 			return m
 		},
 	},
 	{
-		Get: func(a *Agent) *models.Metrics {
+		Get: func(a *Agent) *model.Metrics {
 			value := float64(a.BuckHashSys)
-			m, _ := models.CreateMetrics("BuckHashSys", models.Gauge, 0, value)
+			m, _ := model.CreateMetrics("BuckHashSys", model.Gauge, 0, value)
 			return m
 		},
 	},
 	{
-		Get: func(a *Agent) *models.Metrics {
+		Get: func(a *Agent) *model.Metrics {
 			value := float64(a.Frees)
-			m, _ := models.CreateMetrics("Frees", models.Gauge, 0, value)
+			m, _ := model.CreateMetrics("Frees", model.Gauge, 0, value)
 			return m
 		},
 	},
 	{
-		Get: func(a *Agent) *models.Metrics {
+		Get: func(a *Agent) *model.Metrics {
 			value := a.GCCPUFraction
-			m, _ := models.CreateMetrics("GCCPUFraction", models.Gauge, 0, value)
+			m, _ := model.CreateMetrics("GCCPUFraction", model.Gauge, 0, value)
 			return m
 		},
 	},
 	{
-		Get: func(a *Agent) *models.Metrics {
+		Get: func(a *Agent) *model.Metrics {
 			value := float64(a.GCSys)
-			m, _ := models.CreateMetrics("GCSys", models.Gauge, 0, value)
+			m, _ := model.CreateMetrics("GCSys", model.Gauge, 0, value)
 			return m
 		},
 	},
 	{
-		Get: func(a *Agent) *models.Metrics {
+		Get: func(a *Agent) *model.Metrics {
 			value := float64(a.HeapAlloc)
-			m, _ := models.CreateMetrics("HeapAlloc", models.Gauge, 0, value)
+			m, _ := model.CreateMetrics("HeapAlloc", model.Gauge, 0, value)
 			return m
 		},
 	},
 	{
-		Get: func(a *Agent) *models.Metrics {
+		Get: func(a *Agent) *model.Metrics {
 			value := float64(a.HeapIdle)
-			m, _ := models.CreateMetrics("HeapIdle", models.Gauge, 0, value)
+			m, _ := model.CreateMetrics("HeapIdle", model.Gauge, 0, value)
 			return m
 		},
 	},
 	{
-		Get: func(a *Agent) *models.Metrics {
+		Get: func(a *Agent) *model.Metrics {
 			value := float64(a.HeapInuse)
-			m, _ := models.CreateMetrics("HeapInuse", models.Gauge, 0, value)
+			m, _ := model.CreateMetrics("HeapInuse", model.Gauge, 0, value)
 			return m
 		},
 	},
 	{
-		Get: func(a *Agent) *models.Metrics {
+		Get: func(a *Agent) *model.Metrics {
 			value := float64(a.HeapObjects)
-			m, _ := models.CreateMetrics("HeapObjects", models.Gauge, 0, value)
+			m, _ := model.CreateMetrics("HeapObjects", model.Gauge, 0, value)
 			return m
 		},
 	},
 	{
-		Get: func(a *Agent) *models.Metrics {
+		Get: func(a *Agent) *model.Metrics {
 			value := float64(a.HeapReleased)
-			m, _ := models.CreateMetrics("HeapReleased", models.Gauge, 0, value)
+			m, _ := model.CreateMetrics("HeapReleased", model.Gauge, 0, value)
 			return m
 		},
 	},
 	{
-		Get: func(a *Agent) *models.Metrics {
+		Get: func(a *Agent) *model.Metrics {
 			value := float64(a.HeapSys)
-			m, _ := models.CreateMetrics("HeapSys", models.Gauge, 0, value)
+			m, _ := model.CreateMetrics("HeapSys", model.Gauge, 0, value)
 			return m
 		},
 	},
 	{
-		Get: func(a *Agent) *models.Metrics {
+		Get: func(a *Agent) *model.Metrics {
 			value := float64(a.LastGC)
-			m, _ := models.CreateMetrics("LastGC", models.Gauge, 0, value)
+			m, _ := model.CreateMetrics("LastGC", model.Gauge, 0, value)
 			return m
 		},
 	},
 	{
-		Get: func(a *Agent) *models.Metrics {
+		Get: func(a *Agent) *model.Metrics {
 			value := float64(a.Lookups)
-			m, _ := models.CreateMetrics("Lookups", models.Gauge, 0, value)
+			m, _ := model.CreateMetrics("Lookups", model.Gauge, 0, value)
 			return m
 		},
 	},
 	{
-		Get: func(a *Agent) *models.Metrics {
+		Get: func(a *Agent) *model.Metrics {
 			value := float64(a.Mallocs)
-			m, _ := models.CreateMetrics("Mallocs", models.Gauge, 0, value)
+			m, _ := model.CreateMetrics("Mallocs", model.Gauge, 0, value)
 			return m
 		},
 	},
 	{
-		Get: func(a *Agent) *models.Metrics {
+		Get: func(a *Agent) *model.Metrics {
 			value := float64(a.MCacheInuse)
-			m, _ := models.CreateMetrics("MCacheInuse", models.Gauge, 0, value)
+			m, _ := model.CreateMetrics("MCacheInuse", model.Gauge, 0, value)
 			return m
 		},
 	},
 	{
-		Get: func(a *Agent) *models.Metrics {
+		Get: func(a *Agent) *model.Metrics {
 			value := float64(a.MCacheSys)
-			m, _ := models.CreateMetrics("MCacheSys", models.Gauge, 0, value)
+			m, _ := model.CreateMetrics("MCacheSys", model.Gauge, 0, value)
 			return m
 		},
 	},
 	{
-		Get: func(a *Agent) *models.Metrics {
+		Get: func(a *Agent) *model.Metrics {
 			value := float64(a.MSpanInuse)
-			m, _ := models.CreateMetrics("MSpanInuse", models.Gauge, 0, value)
+			m, _ := model.CreateMetrics("MSpanInuse", model.Gauge, 0, value)
 			return m
 		},
 	},
 	{
-		Get: func(a *Agent) *models.Metrics {
+		Get: func(a *Agent) *model.Metrics {
 			value := float64(a.MSpanSys)
-			m, _ := models.CreateMetrics("MSpanSys", models.Gauge, 0, value)
+			m, _ := model.CreateMetrics("MSpanSys", model.Gauge, 0, value)
 			return m
 		},
 	},
 	{
-		Get: func(a *Agent) *models.Metrics {
+		Get: func(a *Agent) *model.Metrics {
 			value := float64(a.NextGC)
-			m, _ := models.CreateMetrics("NextGC", models.Gauge, 0, value)
+			m, _ := model.CreateMetrics("NextGC", model.Gauge, 0, value)
 			return m
 		},
 	},
 	{
-		Get: func(a *Agent) *models.Metrics {
+		Get: func(a *Agent) *model.Metrics {
 			value := float64(a.NumForcedGC)
-			m, _ := models.CreateMetrics("NumForcedGC", models.Gauge, 0, value)
+			m, _ := model.CreateMetrics("NumForcedGC", model.Gauge, 0, value)
 			return m
 		},
 	},
 	{
-		Get: func(a *Agent) *models.Metrics {
+		Get: func(a *Agent) *model.Metrics {
 			value := float64(a.NumGC)
-			m, _ := models.CreateMetrics("NumGC", models.Gauge, 0, value)
+			m, _ := model.CreateMetrics("NumGC", model.Gauge, 0, value)
 			return m
 		},
 	},
 	{
-		Get: func(a *Agent) *models.Metrics {
+		Get: func(a *Agent) *model.Metrics {
 			value := float64(a.OtherSys)
-			m, _ := models.CreateMetrics("OtherSys", models.Gauge, 0, value)
+			m, _ := model.CreateMetrics("OtherSys", model.Gauge, 0, value)
 			return m
 		},
 	},
 	{
-		Get: func(a *Agent) *models.Metrics {
+		Get: func(a *Agent) *model.Metrics {
 			value := float64(a.PauseTotalNs)
-			m, _ := models.CreateMetrics("PauseTotalNs", models.Gauge, 0, value)
+			m, _ := model.CreateMetrics("PauseTotalNs", model.Gauge, 0, value)
 			return m
 		},
 	},
 	{
-		Get: func(a *Agent) *models.Metrics {
+		Get: func(a *Agent) *model.Metrics {
 			value := float64(a.StackInuse)
-			m, _ := models.CreateMetrics("StackInuse", models.Gauge, 0, value)
+			m, _ := model.CreateMetrics("StackInuse", model.Gauge, 0, value)
 			return m
 		},
 	},
 	{
-		Get: func(a *Agent) *models.Metrics {
+		Get: func(a *Agent) *model.Metrics {
 			value := float64(a.StackSys)
-			m, _ := models.CreateMetrics("StackSys", models.Gauge, 0, value)
+			m, _ := model.CreateMetrics("StackSys", model.Gauge, 0, value)
 			return m
 		},
 	},
 	{
-		Get: func(a *Agent) *models.Metrics {
+		Get: func(a *Agent) *model.Metrics {
 			value := float64(a.Sys)
-			m, _ := models.CreateMetrics("Sys", models.Gauge, 0, value)
+			m, _ := model.CreateMetrics("Sys", model.Gauge, 0, value)
 			return m
 		},
 	},
 	{
-		Get: func(a *Agent) *models.Metrics {
+		Get: func(a *Agent) *model.Metrics {
 			value := float64(a.TotalAlloc)
-			m, _ := models.CreateMetrics("TotalAlloc", models.Gauge, 0, value)
+			m, _ := model.CreateMetrics("TotalAlloc", model.Gauge, 0, value)
 			return m
 		},
 	},
 	{
-		Get: func(a *Agent) *models.Metrics {
-			m, _ := models.CreateMetrics("PollCount", models.Counter, a.PollCount, 0)
+		Get: func(a *Agent) *model.Metrics {
+			m, _ := model.CreateMetrics("PollCount", model.Counter, a.PollCount, 0)
 			return m
 		},
 	},
 	{
-		Get: func(a *Agent) *models.Metrics {
-			m, _ := models.CreateMetrics("RandomValue", models.Gauge, 0, a.RandomValue)
+		Get: func(a *Agent) *model.Metrics {
+			m, _ := model.CreateMetrics("RandomValue", model.Gauge, 0, a.RandomValue)
 			return m
 		},
 	},
 	{
-		Get: func(a *Agent) *models.Metrics {
-			m, _ := models.CreateMetrics("TotalMemory", models.Gauge, 0, a.TotalMemory)
+		Get: func(a *Agent) *model.Metrics {
+			m, _ := model.CreateMetrics("TotalMemory", model.Gauge, 0, a.TotalMemory)
 			return m
 		},
 	},
 	{
-		Get: func(a *Agent) *models.Metrics {
-			m, _ := models.CreateMetrics("FreeMemory", models.Gauge, 0, a.FreeMemory)
+		Get: func(a *Agent) *model.Metrics {
+			m, _ := model.CreateMetrics("FreeMemory", model.Gauge, 0, a.FreeMemory)
 			return m
 		},
 	},
 }
 
-func (a *Agent) buildMetrics() []models.Metrics {
+func (a *Agent) buildMetrics() []model.Metrics {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	result := make([]models.Metrics, 0, len(metricsRegistry)+len(a.CPUUtilizations))
+	result := make([]model.Metrics, 0, len(metricsRegistry)+len(a.CPUUtilizations))
 
 	for _, md := range metricsRegistry {
 		m := md.Get(a)
@@ -484,7 +479,7 @@ func (a *Agent) buildMetrics() []models.Metrics {
 	return result
 }
 
-func (a *Agent) sendMetricsURL(metrics []*models.Metrics) error {
+func (a *Agent) sendMetricsURL(metrics []*model.Metrics) error {
 	for _, m := range metrics {
 		url := a.createURLFromMetric(m)
 		_, err := a.client.R().
@@ -499,7 +494,7 @@ func (a *Agent) sendMetricsURL(metrics []*models.Metrics) error {
 	return nil
 }
 
-func (a *Agent) sendMetricsJSON(metrics []models.Metrics, gzipCompressed bool) error {
+func (a *Agent) sendMetricsJSON(metrics []model.Metrics, gzipCompressed bool) error {
 	if len(metrics) == 0 {
 		return nil
 	}
@@ -567,12 +562,12 @@ func gzipCompressJSON(body []byte) ([]byte, error) {
 	return b.Bytes(), nil
 }
 
-func (a *Agent) createURLFromMetric(m *models.Metrics) string {
+func (a *Agent) createURLFromMetric(m *model.Metrics) string {
 	var url string
 	switch m.MType {
-	case models.Counter:
+	case model.Counter:
 		url = fmt.Sprintf("http://%s/update/%s/%s/%d", a.cfg.ServerAddress, m.MType, m.ID, *m.Delta)
-	case models.Gauge:
+	case model.Gauge:
 		url = fmt.Sprintf("http://%s/update/%s/%s/%.2f", a.cfg.ServerAddress, m.MType, m.ID, *m.Value)
 	default:
 	}

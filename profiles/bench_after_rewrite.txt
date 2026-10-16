@@ -1,0 +1,126 @@
+goos: darwin
+goarch: arm64
+pkg: github.com/paveltovchigrechko/metrics-service/internal/handler
+cpu: Apple M3
+BenchmarkMainPage/metrics=100-8         	   74149	      4791 ns/op	      5374 bytes/op	         1.000 writes/op	    6591 B/op	       2 allocs/op
+BenchmarkMainPage/metrics=100-8         	   70496	      4973 ns/op	      5374 bytes/op	         1.000 writes/op	    6572 B/op	       2 allocs/op
+BenchmarkMainPage/metrics=100-8         	   80079	      4485 ns/op	      5374 bytes/op	         1.000 writes/op	    6574 B/op	       2 allocs/op
+BenchmarkMainPage/metrics=100-8         	   80659	      4444 ns/op	      5374 bytes/op	         1.000 writes/op	    6576 B/op	       2 allocs/op
+BenchmarkMainPage/metrics=100-8         	   80758	      4500 ns/op	      5374 bytes/op	         1.000 writes/op	    6581 B/op	       2 allocs/op
+BenchmarkMainPage/metrics=100-8         	   80145	      4488 ns/op	      5374 bytes/op	         1.000 writes/op	    6575 B/op	       2 allocs/op
+BenchmarkMainPage/metrics=1000-8        	    7056	     50733 ns/op	     53098 bytes/op	         1.000 writes/op	   66504 B/op	       2 allocs/op
+BenchmarkMainPage/metrics=1000-8        	    7327	     51818 ns/op	     53098 bytes/op	         1.000 writes/op	   66676 B/op	       2 allocs/op
+BenchmarkMainPage/metrics=1000-8        	    7174	     56670 ns/op	     53098 bytes/op	         1.000 writes/op	   66689 B/op	       2 allocs/op
+BenchmarkMainPage/metrics=1000-8        	    6756	     52575 ns/op	     53098 bytes/op	         1.000 writes/op	   66652 B/op	       2 allocs/op
+BenchmarkMainPage/metrics=1000-8        	    7086	     53308 ns/op	     53098 bytes/op	         1.000 writes/op	   66629 B/op	       2 allocs/op
+BenchmarkMainPage/metrics=1000-8        	    6542	     52710 ns/op	     53098 bytes/op	         1.000 writes/op	   66687 B/op	       2 allocs/op
+BenchmarkMainPage/metrics=5000-8        	    1298	    283410 ns/op	    268098 bytes/op	         1.000 writes/op	  370294 B/op	       2 allocs/op
+BenchmarkMainPage/metrics=5000-8        	    1269	    285429 ns/op	    268098 bytes/op	         1.000 writes/op	  380874 B/op	       2 allocs/op
+BenchmarkMainPage/metrics=5000-8        	    1232	    323850 ns/op	    268098 bytes/op	         1.000 writes/op	  384411 B/op	       2 allocs/op
+BenchmarkMainPage/metrics=5000-8        	    1188	    302838 ns/op	    268098 bytes/op	         1.000 writes/op	  380871 B/op	       2 allocs/op
+BenchmarkMainPage/metrics=5000-8        	    1254	    296835 ns/op	    268098 bytes/op	         1.000 writes/op	  380912 B/op	       2 allocs/op
+BenchmarkMainPage/metrics=5000-8        	    1190	    294542 ns/op	    268098 bytes/op	         1.000 writes/op	  377151 B/op	       2 allocs/op
+BenchmarkMainPageHTTP/metrics=100-8     	    3453	     97807 ns/op	   13172 B/op	      71 allocs/op
+BenchmarkMainPageHTTP/metrics=100-8     	    3502	     99990 ns/op	   13254 B/op	      71 allocs/op
+BenchmarkMainPageHTTP/metrics=100-8     	    3986	     95993 ns/op	   13233 B/op	      71 allocs/op
+BenchmarkMainPageHTTP/metrics=100-8     	    3685	     90019 ns/op	   13266 B/op	      71 allocs/op
+BenchmarkMainPageHTTP/metrics=100-8     	    4026	     90850 ns/op	   13127 B/op	      71 allocs/op
+BenchmarkMainPageHTTP/metrics=100-8     	    4076	     99079 ns/op	   13141 B/op	      71 allocs/op
+BenchmarkMainPageHTTP/metrics=1000-8    	    1778	    189775 ns/op	   75655 B/op	      72 allocs/op
+BenchmarkMainPageHTTP/metrics=1000-8    	    1951	    183393 ns/op	   76700 B/op	      72 allocs/op
+BenchmarkMainPageHTTP/metrics=1000-8    	    1718	    184080 ns/op	   76496 B/op	      72 allocs/op
+BenchmarkMainPageHTTP/metrics=1000-8    	    1962	    186973 ns/op	   76815 B/op	      72 allocs/op
+BenchmarkMainPageHTTP/metrics=1000-8    	    1950	    181403 ns/op	   76650 B/op	      72 allocs/op
+BenchmarkMainPageHTTP/metrics=1000-8    	    1969	    179406 ns/op	   76720 B/op	      72 allocs/op
+BenchmarkMainPageHTTP/metrics=5000-8    	     679	    531347 ns/op	  482136 B/op	      78 allocs/op
+BenchmarkMainPageHTTP/metrics=5000-8    	     649	    544476 ns/op	  499552 B/op	      79 allocs/op
+BenchmarkMainPageHTTP/metrics=5000-8    	     530	    911914 ns/op	  478911 B/op	      79 allocs/op
+BenchmarkMainPageHTTP/metrics=5000-8    	     330	   1034192 ns/op	  455774 B/op	      78 allocs/op
+BenchmarkMainPageHTTP/metrics=5000-8    	     330	   1078063 ns/op	  466262 B/op	      78 allocs/op
+BenchmarkMainPageHTTP/metrics=5000-8    	     328	   1073190 ns/op	  514593 B/op	      80 allocs/op
+BenchmarkMainPageParallel-8             	    4430	     93134 ns/op	  354164 B/op	       8 allocs/op
+BenchmarkMainPageParallel-8             	    4566	     79733 ns/op	  354067 B/op	       7 allocs/op
+BenchmarkMainPageParallel-8             	    3760	     83314 ns/op	  353434 B/op	       9 allocs/op
+BenchmarkMainPageParallel-8             	    4088	    102572 ns/op	  353098 B/op	       8 allocs/op
+BenchmarkMainPageParallel-8             	    3507	     90114 ns/op	  354839 B/op	       9 allocs/op
+BenchmarkMainPageParallel-8             	    4129	     83621 ns/op	  354377 B/op	       8 allocs/op
+PASS
+ok  	github.com/paveltovchigrechko/metrics-service/internal/handler	16.681s
+goos: darwin
+goarch: arm64
+pkg: github.com/paveltovchigrechko/metrics-service/internal/server
+cpu: Apple M3
+BenchmarkRouterMainPage/bare-8         	    1203	    302135 ns/op	    268098 respbytes/op	  387671 B/op	       5 allocs/op
+BenchmarkRouterMainPage/bare-8         	    1203	    346704 ns/op	    268098 respbytes/op	  386368 B/op	       5 allocs/op
+BenchmarkRouterMainPage/bare-8         	    1041	    328309 ns/op	    268098 respbytes/op	  386303 B/op	       5 allocs/op
+BenchmarkRouterMainPage/bare-8         	    1234	    292576 ns/op	    268098 respbytes/op	  381085 B/op	       5 allocs/op
+BenchmarkRouterMainPage/bare-8         	    1286	    322165 ns/op	    268098 respbytes/op	  379851 B/op	       5 allocs/op
+BenchmarkRouterMainPage/bare-8         	    1185	    303276 ns/op	    268098 respbytes/op	  388577 B/op	       5 allocs/op
+BenchmarkRouterMainPage/logger-8       	    1198	    300125 ns/op	    268098 respbytes/op	  391314 B/op	      11 allocs/op
+BenchmarkRouterMainPage/logger-8       	    1197	    289646 ns/op	    268098 respbytes/op	  379148 B/op	      11 allocs/op
+BenchmarkRouterMainPage/logger-8       	    1196	    302185 ns/op	    268098 respbytes/op	  384183 B/op	      11 allocs/op
+BenchmarkRouterMainPage/logger-8       	    1196	    302051 ns/op	    268098 respbytes/op	  393395 B/op	      11 allocs/op
+BenchmarkRouterMainPage/logger-8       	    1215	    303304 ns/op	    268098 respbytes/op	  387840 B/op	      11 allocs/op
+BenchmarkRouterMainPage/logger-8       	    1236	    325778 ns/op	    268098 respbytes/op	  391031 B/op	      11 allocs/op
+BenchmarkRouterMainPage/logger+gzip-8  	     312	   1148286 ns/op	     40781 respbytes/op	 1641462 B/op	      34 allocs/op
+BenchmarkRouterMainPage/logger+gzip-8  	     302	   1168898 ns/op	     40572 respbytes/op	 1637103 B/op	      34 allocs/op
+BenchmarkRouterMainPage/logger+gzip-8  	     298	   1176717 ns/op	     39871 respbytes/op	 1649010 B/op	      34 allocs/op
+BenchmarkRouterMainPage/logger+gzip-8  	     313	   1138158 ns/op	     40834 respbytes/op	 1656243 B/op	      34 allocs/op
+BenchmarkRouterMainPage/logger+gzip-8  	     313	   1131850 ns/op	     40594 respbytes/op	 1647411 B/op	      34 allocs/op
+BenchmarkRouterMainPage/logger+gzip-8  	     177	   1710519 ns/op	     40163 respbytes/op	 1643485 B/op	      34 allocs/op
+BenchmarkRouterMainPage/logger+hash+gzip-8         	     283	   1311015 ns/op	     39858 respbytes/op	 1782583 B/op	      57 allocs/op
+BenchmarkRouterMainPage/logger+hash+gzip-8         	     296	   1222104 ns/op	     40497 respbytes/op	 1773597 B/op	      57 allocs/op
+BenchmarkRouterMainPage/logger+hash+gzip-8         	     309	   1182424 ns/op	     40536 respbytes/op	 1750013 B/op	      57 allocs/op
+BenchmarkRouterMainPage/logger+hash+gzip-8         	     267	   1266579 ns/op	     40707 respbytes/op	 1863252 B/op	      58 allocs/op
+BenchmarkRouterMainPage/logger+hash+gzip-8         	     310	   1137778 ns/op	     40672 respbytes/op	 1744663 B/op	      57 allocs/op
+BenchmarkRouterMainPage/logger+hash+gzip-8         	     298	   1201670 ns/op	     40402 respbytes/op	 1825790 B/op	      58 allocs/op
+BenchmarkRouterUpdates/metrics=29/bare-8           	   21679	     16560 ns/op	  84.42 MB/s	   10883 B/op	     172 allocs/op
+BenchmarkRouterUpdates/metrics=29/bare-8           	   20983	     16974 ns/op	  82.36 MB/s	   10884 B/op	     172 allocs/op
+BenchmarkRouterUpdates/metrics=29/bare-8           	   21361	     16949 ns/op	  82.48 MB/s	   10883 B/op	     172 allocs/op
+BenchmarkRouterUpdates/metrics=29/bare-8           	   21480	     16651 ns/op	  83.96 MB/s	   10884 B/op	     172 allocs/op
+BenchmarkRouterUpdates/metrics=29/bare-8           	   21736	     16560 ns/op	  84.42 MB/s	   10883 B/op	     172 allocs/op
+BenchmarkRouterUpdates/metrics=29/bare-8           	   18579	     18067 ns/op	  77.38 MB/s	   10884 B/op	     172 allocs/op
+BenchmarkRouterUpdates/metrics=29/logger-8         	   21244	     16906 ns/op	  82.69 MB/s	   12244 B/op	     185 allocs/op
+BenchmarkRouterUpdates/metrics=29/logger-8         	   21390	     16858 ns/op	  82.93 MB/s	   12244 B/op	     185 allocs/op
+BenchmarkRouterUpdates/metrics=29/logger-8         	   21315	     16895 ns/op	  82.75 MB/s	   12244 B/op	     185 allocs/op
+BenchmarkRouterUpdates/metrics=29/logger-8         	   20348	     17698 ns/op	  78.99 MB/s	   12244 B/op	     185 allocs/op
+BenchmarkRouterUpdates/metrics=29/logger-8         	   19056	     18496 ns/op	  75.58 MB/s	   12244 B/op	     185 allocs/op
+BenchmarkRouterUpdates/metrics=29/logger-8         	   19473	     19858 ns/op	  70.40 MB/s	   12244 B/op	     185 allocs/op
+BenchmarkRouterUpdates/metrics=29/logger+gzip-8    	    3726	    108413 ns/op	  12.90 MB/s	 1213035 B/op	     204 allocs/op
+BenchmarkRouterUpdates/metrics=29/logger+gzip-8    	    3612	     96084 ns/op	  14.55 MB/s	 1213039 B/op	     204 allocs/op
+BenchmarkRouterUpdates/metrics=29/logger+gzip-8    	    3936	     98529 ns/op	  14.19 MB/s	 1213039 B/op	     204 allocs/op
+BenchmarkRouterUpdates/metrics=29/logger+gzip-8    	    4220	     96536 ns/op	  14.48 MB/s	 1213040 B/op	     204 allocs/op
+BenchmarkRouterUpdates/metrics=29/logger+gzip-8    	    4264	     91061 ns/op	  15.35 MB/s	 1213034 B/op	     204 allocs/op
+BenchmarkRouterUpdates/metrics=29/logger+gzip-8    	    4167	     91066 ns/op	  15.35 MB/s	 1213038 B/op	     204 allocs/op
+BenchmarkRouterUpdates/metrics=29/logger+hash+gzip-8         	    3730	     91052 ns/op	  15.35 MB/s	 1217612 B/op	     232 allocs/op
+BenchmarkRouterUpdates/metrics=29/logger+hash+gzip-8         	    3936	     94955 ns/op	  14.72 MB/s	 1217611 B/op	     232 allocs/op
+BenchmarkRouterUpdates/metrics=29/logger+hash+gzip-8         	    4420	     89242 ns/op	  15.67 MB/s	 1217613 B/op	     232 allocs/op
+BenchmarkRouterUpdates/metrics=29/logger+hash+gzip-8         	    3943	     86309 ns/op	  16.20 MB/s	 1217609 B/op	     232 allocs/op
+BenchmarkRouterUpdates/metrics=29/logger+hash+gzip-8         	    4412	     82400 ns/op	  16.97 MB/s	 1217609 B/op	     232 allocs/op
+BenchmarkRouterUpdates/metrics=29/logger+hash+gzip-8         	    4525	     83097 ns/op	  16.82 MB/s	 1217605 B/op	     232 allocs/op
+BenchmarkRouterUpdates/metrics=1000/bare-8                   	     640	    627041 ns/op	  79.21 MB/s	  398215 B/op	    5279 allocs/op
+BenchmarkRouterUpdates/metrics=1000/bare-8                   	     618	    589437 ns/op	  84.26 MB/s	  398216 B/op	    5279 allocs/op
+BenchmarkRouterUpdates/metrics=1000/bare-8                   	     619	    576365 ns/op	  86.17 MB/s	  398218 B/op	    5279 allocs/op
+BenchmarkRouterUpdates/metrics=1000/bare-8                   	     655	    549457 ns/op	  90.39 MB/s	  398206 B/op	    5279 allocs/op
+BenchmarkRouterUpdates/metrics=1000/bare-8                   	     655	    546943 ns/op	  90.81 MB/s	  398205 B/op	    5279 allocs/op
+BenchmarkRouterUpdates/metrics=1000/bare-8                   	     626	    562772 ns/op	  88.25 MB/s	  398214 B/op	    5279 allocs/op
+BenchmarkRouterUpdates/metrics=1000/logger-8                 	     651	    550182 ns/op	  90.27 MB/s	  399553 B/op	    5292 allocs/op
+BenchmarkRouterUpdates/metrics=1000/logger-8                 	     651	    554184 ns/op	  89.62 MB/s	  399552 B/op	    5292 allocs/op
+BenchmarkRouterUpdates/metrics=1000/logger-8                 	     644	    551395 ns/op	  90.07 MB/s	  399555 B/op	    5292 allocs/op
+BenchmarkRouterUpdates/metrics=1000/logger-8                 	     656	    547795 ns/op	  90.67 MB/s	  399552 B/op	    5292 allocs/op
+BenchmarkRouterUpdates/metrics=1000/logger-8                 	     660	    565130 ns/op	  87.88 MB/s	  399551 B/op	    5292 allocs/op
+BenchmarkRouterUpdates/metrics=1000/logger-8                 	     645	    551524 ns/op	  90.05 MB/s	  399553 B/op	    5292 allocs/op
+BenchmarkRouterUpdates/metrics=1000/logger+gzip-8            	     582	    665281 ns/op	  74.65 MB/s	 1600251 B/op	    5311 allocs/op
+BenchmarkRouterUpdates/metrics=1000/logger+gzip-8            	     564	    622500 ns/op	  79.78 MB/s	 1600282 B/op	    5311 allocs/op
+BenchmarkRouterUpdates/metrics=1000/logger+gzip-8            	     579	    641710 ns/op	  77.40 MB/s	 1600278 B/op	    5311 allocs/op
+BenchmarkRouterUpdates/metrics=1000/logger+gzip-8            	     561	    630812 ns/op	  78.73 MB/s	 1600282 B/op	    5311 allocs/op
+BenchmarkRouterUpdates/metrics=1000/logger+gzip-8            	     570	    628512 ns/op	  79.02 MB/s	 1600254 B/op	    5311 allocs/op
+BenchmarkRouterUpdates/metrics=1000/logger+gzip-8            	     567	    632676 ns/op	  78.50 MB/s	 1600302 B/op	    5311 allocs/op
+BenchmarkRouterUpdates/metrics=1000/logger+hash+gzip-8       	     526	    725886 ns/op	  68.42 MB/s	 1732075 B/op	    5351 allocs/op
+BenchmarkRouterUpdates/metrics=1000/logger+hash+gzip-8       	     525	    695126 ns/op	  71.45 MB/s	 1732074 B/op	    5351 allocs/op
+BenchmarkRouterUpdates/metrics=1000/logger+hash+gzip-8       	     511	    750058 ns/op	  66.22 MB/s	 1732094 B/op	    5351 allocs/op
+BenchmarkRouterUpdates/metrics=1000/logger+hash+gzip-8       	     530	    687081 ns/op	  72.29 MB/s	 1732076 B/op	    5351 allocs/op
+BenchmarkRouterUpdates/metrics=1000/logger+hash+gzip-8       	     525	    687457 ns/op	  72.25 MB/s	 1732095 B/op	    5351 allocs/op
+BenchmarkRouterUpdates/metrics=1000/logger+hash+gzip-8       	     530	    681384 ns/op	  72.89 MB/s	 1732077 B/op	    5351 allocs/op
+PASS
+ok  	github.com/paveltovchigrechko/metrics-service/internal/server	27.093s

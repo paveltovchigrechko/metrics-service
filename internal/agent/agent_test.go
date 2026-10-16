@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/paveltovchigrechko/metrics-service/internal/config"
-	models "github.com/paveltovchigrechko/metrics-service/internal/model"
+	"github.com/paveltovchigrechko/metrics-service/internal/model"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -44,13 +44,13 @@ func TestSendMetrics(t *testing.T) {
 		cleanAddr := strings.TrimPrefix(server.URL, "http://")
 		a.cfg.ServerAddress = cleanAddr
 
-		counterMetric, err := models.CreateMetrics("PollCount", models.Counter, 10, 0)
+		counterMetric, err := model.CreateMetrics("PollCount", model.Counter, 10, 0)
 		require.NoError(t, err)
 
-		gaugeMetric, err := models.CreateMetrics("Alloc", models.Gauge, 0, 123.45)
+		gaugeMetric, err := model.CreateMetrics("Alloc", model.Gauge, 0, 123.45)
 		require.NoError(t, err)
 
-		err = a.sendMetricsURL([]*models.Metrics{counterMetric, gaugeMetric})
+		err = a.sendMetricsURL([]*model.Metrics{counterMetric, gaugeMetric})
 		require.NoError(t, err)
 
 		require.Len(t, receivedPaths, 2)
@@ -64,10 +64,10 @@ func TestSendMetrics(t *testing.T) {
 		require.Nil(t, err)
 		a := NewAgent(cfg)
 
-		metric, err := models.CreateMetrics("Alloc", models.Gauge, 0, 1.0)
+		metric, err := model.CreateMetrics("Alloc", model.Gauge, 0, 1.0)
 		require.NoError(t, err)
 
-		err = a.sendMetricsURL([]*models.Metrics{metric})
+		err = a.sendMetricsURL([]*model.Metrics{metric})
 		assert.Error(t, err)
 	})
 
@@ -82,12 +82,12 @@ func TestSendMetrics(t *testing.T) {
 		require.Nil(t, err)
 		a := NewAgent(cfg)
 
-		m1, err := models.CreateMetrics("Alloc", models.Gauge, 0, 1.0)
+		m1, err := model.CreateMetrics("Alloc", model.Gauge, 0, 1.0)
 		require.NoError(t, err)
-		m2, err := models.CreateMetrics("Frees", models.Gauge, 0, 2.0)
+		m2, err := model.CreateMetrics("Frees", model.Gauge, 0, 2.0)
 		require.NoError(t, err)
 
-		err = a.sendMetricsURL([]*models.Metrics{m1, m2})
+		err = a.sendMetricsURL([]*model.Metrics{m1, m2})
 		assert.Error(t, err)
 	})
 
@@ -97,7 +97,7 @@ func TestSendMetrics(t *testing.T) {
 		require.Nil(t, err)
 		a := NewAgent(cfg)
 
-		err = a.sendMetricsURL([]*models.Metrics{})
+		err = a.sendMetricsURL([]*model.Metrics{})
 		assert.NoError(t, err)
 	})
 }
@@ -225,7 +225,7 @@ func TestBuildMetrics(t *testing.T) {
 
 		found := findMetric(result, "PollCount")
 		require.NotNil(t, found)
-		assert.Equal(t, models.Counter, found.MType)
+		assert.Equal(t, model.Counter, found.MType)
 		require.NotNil(t, found.Delta)
 		assert.Equal(t, int64(7), *found.Delta)
 	})
@@ -236,7 +236,7 @@ func TestBuildMetrics(t *testing.T) {
 
 		found := findMetric(result, "RandomValue")
 		require.NotNil(t, found)
-		assert.Equal(t, models.Gauge, found.MType)
+		assert.Equal(t, model.Gauge, found.MType)
 		require.NotNil(t, found.Value)
 		assert.Equal(t, 42.42, *found.Value)
 	})
@@ -247,7 +247,7 @@ func TestBuildMetrics(t *testing.T) {
 
 		found := findMetric(result, "Alloc")
 		require.NotNil(t, found)
-		assert.Equal(t, models.Gauge, found.MType)
+		assert.Equal(t, model.Gauge, found.MType)
 		require.NotNil(t, found.Value)
 		assert.Equal(t, 100.0, *found.Value)
 	})
@@ -260,7 +260,7 @@ func TestBuildMetrics(t *testing.T) {
 }
 
 // Test helper
-func findMetric(metrics []models.Metrics, id string) *models.Metrics {
+func findMetric(metrics []model.Metrics, id string) *model.Metrics {
 	for _, m := range metrics {
 		if m.ID == id {
 			return &m
@@ -272,32 +272,32 @@ func findMetric(metrics []models.Metrics, id string) *models.Metrics {
 func TestCreateURLFromMetric(t *testing.T) {
 	testCases := []struct {
 		name        string
-		m           *models.Metrics
-		expectedUrl string
+		m           *model.Metrics
+		expectedURL string
 	}{
 		{
 			name: "Counter metrics",
-			m: func() *models.Metrics {
+			m: func() *model.Metrics {
 				delta := int64(8)
-				return &models.Metrics{
+				return &model.Metrics{
 					ID:    "someName",
-					MType: models.Counter,
+					MType: model.Counter,
 					Delta: &delta,
 				}
 			}(),
-			expectedUrl: "http://localhost:8080/update/counter/someName/8",
+			expectedURL: "http://localhost:8080/update/counter/someName/8",
 		},
 		{
 			name: "Gauge metrics",
-			m: func() *models.Metrics {
+			m: func() *model.Metrics {
 				value := float64(8.8893)
-				return &models.Metrics{
+				return &model.Metrics{
 					ID:    "someName",
-					MType: models.Gauge,
+					MType: model.Gauge,
 					Value: &value,
 				}
 			}(),
-			expectedUrl: "http://localhost:8080/update/gauge/someName/8.89",
+			expectedURL: "http://localhost:8080/update/gauge/someName/8.89",
 		},
 	}
 	cfg, err := config.SetAgentConfig([]string{})
@@ -309,7 +309,7 @@ func TestCreateURLFromMetric(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			result := a.createURLFromMetric(tc.m)
-			assert.Equal(t, tc.expectedUrl, result)
+			assert.Equal(t, tc.expectedURL, result)
 		})
 	}
 }

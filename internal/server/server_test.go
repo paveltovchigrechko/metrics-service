@@ -7,12 +7,15 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/paveltovchigrechko/metrics-service/internal/audit"
 	"github.com/paveltovchigrechko/metrics-service/internal/common"
 	"github.com/paveltovchigrechko/metrics-service/internal/config"
-	models "github.com/paveltovchigrechko/metrics-service/internal/model"
+	"github.com/paveltovchigrechko/metrics-service/internal/model"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -38,10 +41,10 @@ func TestNewServer(t *testing.T) {
 		tmpDir := t.TempDir()
 		backupFile := filepath.Join(tmpDir, "metrics.json")
 
-		historicalMetrics := []models.Metrics{
+		historicalMetrics := []model.Metrics{
 			{
 				ID:    "ExistingCounter",
-				MType: models.Counter,
+				MType: model.Counter,
 				Delta: common.Int64Ptr(120),
 			},
 		}
@@ -61,7 +64,7 @@ func TestNewServer(t *testing.T) {
 		require.NoError(t, err)
 		assert.NotNil(t, srv)
 
-		restoredMetric, getErr := srv.storage.GetMetrics(context.Background(), "ExistingCounter", models.Counter)
+		restoredMetric, getErr := srv.storage.GetMetrics(context.Background(), "ExistingCounter", model.Counter)
 		require.NoError(t, getErr)
 		require.NotNil(t, restoredMetric)
 		assert.Equal(t, int64(120), *restoredMetric.Delta)
@@ -120,7 +123,7 @@ func TestNewServer(t *testing.T) {
 		bytes, readErr := os.ReadFile(cfg.FileStoragePath)
 		assert.NoError(t, readErr)
 
-		var saved []models.Metrics
+		var saved []model.Metrics
 		assert.NoError(t, json.Unmarshal(bytes, &saved))
 		assert.Len(t, saved, 1)
 		assert.Equal(t, "Hits", saved[0].ID)
@@ -209,9 +212,9 @@ func TestServer_runStoreLoop(t *testing.T) {
 	require.NoError(t, err)
 
 	// Inject a metric into local memory store
-	err = srv.storage.SaveMetrics(context.Background(), &models.Metrics{
+	err = srv.storage.SaveMetrics(context.Background(), &model.Metrics{
 		ID:    "ActiveSessions",
-		MType: models.Counter,
+		MType: model.Counter,
 		Delta: common.Int64Ptr(777),
 	})
 	require.NoError(t, err)
@@ -226,7 +229,7 @@ func TestServer_runStoreLoop(t *testing.T) {
 			return false // File doesn't exist yet or is currently locked
 		}
 
-		var saved []models.Metrics
+		var saved []model.Metrics
 		if err := json.Unmarshal(bytes, &saved); err != nil {
 			return false // JSON is empty/corrupt or still being written
 		}
@@ -238,4 +241,97 @@ func TestServer_runStoreLoop(t *testing.T) {
 
 		return false
 	}, time.Second*2, time.Millisecond*5, "The storage loop did not save the metrics correctly to disk in time")
+}
+
+func TestServer_Audit(t *testing.T) {
+	t.Run("audit is disabled without file and url", func(t *testing.T) {
+		srv, err := New(&config.ServerConfig{ServerAddress: "localhost:8080"})
+		require.NoError(t, err)
+		assert.Nil(t, srv.auditCloser)
+		assert.NoError(t, srv.StopAudit())
+
+		req := httptest.NewRequest(http.MethodPost, "/update/counter/Hits/5", nil)
+		w := httptest.NewRecorder()
+		srv.router.ServeHTTP(w, req)
+		assert.Equal(t, http.StatusOK, w.Code)
+	})
+
+	t.Run("New fails if the audit file cannot be opened", func(t *testing.T) {
+		auditFile := filepath.Join(t.TempDir(), "no-such-dir", "audit.log")
+		srv, err := New(&config.ServerConfig{ServerAddress: "localhost:8080", AuditFilePath: auditFile})
+		assert.Error(t, err)
+		assert.Nil(t, srv)
+	})
+
+	t.Run("StopAudit flushes events to the audit file", func(t *testing.T) {
+		auditFile := filepath.Join(t.TempDir(), "audit.log")
+		srv, err := New(&config.ServerConfig{ServerAddress: "localhost:8080", AuditFilePath: auditFile})
+		require.NoError(t, err)
+		require.NotNil(t, srv.auditCloser)
+
+		req := httptest.NewRequest(http.MethodPost, "/update/counter/Hits/5", nil)
+		req.RemoteAddr = "192.168.0.42:1234"
+		w := httptest.NewRecorder()
+		srv.router.ServeHTTP(w, req)
+		require.Equal(t, http.StatusOK, w.Code)
+
+		require.NoError(t, srv.StopAudit()) // Waits for the queued events.
+
+		data, err := os.ReadFile(auditFile)
+		require.NoError(t, err)
+		var event audit.Event
+		require.NoError(t, json.Unmarshal(data, &event))
+		assert.Equal(t, []string{"Hits"}, event.Metrics)
+		assert.Equal(t, "192.168.0.42", event.IP)
+		assert.NotZero(t, event.TS)
+	})
+
+	t.Run("StopAudit flushes events to the audit url", func(t *testing.T) {
+		var mu sync.Mutex
+		var got []audit.Event
+		auditSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			var e audit.Event
+			assert.NoError(t, json.NewDecoder(r.Body).Decode(&e))
+			mu.Lock()
+			got = append(got, e)
+			mu.Unlock()
+		}))
+		defer auditSrv.Close()
+
+		srv, err := New(&config.ServerConfig{ServerAddress: "localhost:8080", AuditURL: auditSrv.URL})
+		require.NoError(t, err)
+
+		req := httptest.NewRequest(http.MethodPost, "/update/gauge/Alloc/1.5", nil)
+		w := httptest.NewRecorder()
+		srv.router.ServeHTTP(w, req)
+		require.Equal(t, http.StatusOK, w.Code)
+
+		require.NoError(t, srv.StopAudit())
+
+		mu.Lock()
+		defer mu.Unlock()
+		require.Len(t, got, 1)
+		assert.Equal(t, []string{"Alloc"}, got[0].Metrics)
+	})
+
+	t.Run("both receivers get the event", func(t *testing.T) {
+		auditFile := filepath.Join(t.TempDir(), "audit.log")
+		var called atomic.Bool
+		auditSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			called.Store(true)
+		}))
+		defer auditSrv.Close()
+
+		srv, err := New(&config.ServerConfig{ServerAddress: "localhost:8080", AuditFilePath: auditFile, AuditURL: auditSrv.URL})
+		require.NoError(t, err)
+
+		req := httptest.NewRequest(http.MethodPost, "/update/counter/Hits/5", nil)
+		srv.router.ServeHTTP(httptest.NewRecorder(), req)
+		require.NoError(t, srv.StopAudit())
+
+		data, err := os.ReadFile(auditFile)
+		require.NoError(t, err)
+		assert.NotEmpty(t, data)
+		assert.True(t, called.Load())
+	})
 }
