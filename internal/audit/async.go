@@ -2,6 +2,7 @@ package audit
 
 import (
 	"errors"
+	"io"
 	"log"
 	"sync"
 )
@@ -19,6 +20,9 @@ type AsyncObserver struct {
 
 	mu     sync.RWMutex // Guards closed and sending to events against Close.
 	closed bool
+
+	closeNext sync.Once
+	closeErr  error
 }
 
 func NewAsyncObserver(next Observer, buffer int) *AsyncObserver {
@@ -60,7 +64,9 @@ func (a *AsyncObserver) WriteEvent(e *Event) error {
 	}
 }
 
-// Close stops accepting events and waits until the queued ones are delivered.
+// Close stops accepting events, waits until the queued ones are delivered and
+// then closes the wrapped observer if it implements io.Closer.
+// It is safe to call Close more than once; later calls return the first result.
 func (a *AsyncObserver) Close() error {
 	a.mu.Lock()
 	if !a.closed {
@@ -71,5 +77,11 @@ func (a *AsyncObserver) Close() error {
 
 	<-a.done
 
-	return nil
+	a.closeNext.Do(func() {
+		if c, ok := a.next.(io.Closer); ok {
+			a.closeErr = c.Close()
+		}
+	})
+
+	return a.closeErr
 }

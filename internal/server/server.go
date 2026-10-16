@@ -62,7 +62,7 @@ type Server struct {
 // event there asynchronously.
 //
 // The middlewares wrap every route, in the order given. New returns an error
-// if the database or the storage file cannot be opened.
+// if the database, the storage file or the audit file cannot be opened.
 func New(c *config.ServerConfig, middlewares ...func(http.Handler) http.Handler) (*Server, error) {
 	mode := defineMode(c)
 
@@ -115,7 +115,13 @@ func New(c *config.ServerConfig, middlewares ...func(http.Handler) http.Handler)
 		pinger = database
 	}
 
-	notifier, auditCloser := newAuditNotifier(c)
+	notifier, auditCloser, err := newAuditNotifier(c)
+	if err != nil {
+		if closer != nil {
+			closer.Close()
+		}
+		return nil, err
+	}
 	h := handler.NewHandler(storage, pinger, updateFunc, notifier)
 
 	r := chi.NewRouter()
@@ -232,22 +238,27 @@ func defineMode(c *config.ServerConfig) storageMode {
 
 // newAuditNotifier builds the audit publisher from the config.
 // Every receiver is wrapped in an AsyncObserver, so audit never blocks request handling.
-// It returns nils (audit disabled) if neither the audit file nor the audit URL is set.
-// The returned io.Closer must be closed on shutdown to flush the queued events.
-func newAuditNotifier(c *config.ServerConfig) (audit.Notifier, io.Closer) {
+// It returns nils (audit disabled) if neither the audit file nor the audit URL is set,
+// and an error if the audit file cannot be opened.
+// The returned io.Closer must be closed on shutdown to flush the queued events and close the file.
+func newAuditNotifier(c *config.ServerConfig) (audit.Notifier, io.Closer, error) {
 	var observers []audit.Observer
 	if c.AuditFilePath != "" {
-		observers = append(observers, audit.NewAsyncObserver(audit.NewFileObserver(c.AuditFilePath), auditQueueSize))
+		fo, err := audit.NewFileObserver(c.AuditFilePath)
+		if err != nil {
+			return nil, nil, err
+		}
+		observers = append(observers, audit.NewAsyncObserver(fo, auditQueueSize))
 	}
 	if c.AuditURL != "" {
 		observers = append(observers, audit.NewAsyncObserver(audit.NewHTTPObserver(c.AuditURL), auditQueueSize))
 	}
 
 	if len(observers) == 0 {
-		return nil, nil
+		return nil, nil, nil
 	}
 
 	p := audit.NewPublisher(observers...)
 
-	return p, p
+	return p, p, nil
 }

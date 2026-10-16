@@ -256,6 +256,13 @@ func TestServer_Audit(t *testing.T) {
 		assert.Equal(t, http.StatusOK, w.Code)
 	})
 
+	t.Run("New fails if the audit file cannot be opened", func(t *testing.T) {
+		auditFile := filepath.Join(t.TempDir(), "no-such-dir", "audit.log")
+		srv, err := New(&config.ServerConfig{ServerAddress: "localhost:8080", AuditFilePath: auditFile})
+		assert.Error(t, err)
+		assert.Nil(t, srv)
+	})
+
 	t.Run("StopAudit flushes events to the audit file", func(t *testing.T) {
 		auditFile := filepath.Join(t.TempDir(), "audit.log")
 		srv, err := New(&config.ServerConfig{ServerAddress: "localhost:8080", AuditFilePath: auditFile})

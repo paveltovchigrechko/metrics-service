@@ -19,10 +19,12 @@ var testEvent = &Event{TS: 123, Metrics: []string{"Alloc", "Frees"}, IP: "192.16
 
 func TestFileObserver_AppendsLines(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "audit.log")
-	o := NewFileObserver(path)
+	o, err := NewFileObserver(path)
+	require.NoError(t, err)
 
 	require.NoError(t, o.WriteEvent(testEvent))
 	require.NoError(t, o.WriteEvent(testEvent))
+	require.NoError(t, o.Close())
 
 	data, err := os.ReadFile(path)
 	require.NoError(t, err)
@@ -33,6 +35,33 @@ func TestFileObserver_AppendsLines(t *testing.T) {
 		require.NoError(t, json.Unmarshal([]byte(l), &got))
 		assert.Equal(t, *testEvent, got)
 	}
+}
+
+func TestFileObserver_AppendsToExistingFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "audit.log")
+	require.NoError(t, os.WriteFile(path, []byte("existing\n"), 0600))
+
+	o, err := NewFileObserver(path)
+	require.NoError(t, err)
+	require.NoError(t, o.WriteEvent(testEvent))
+	require.NoError(t, o.Close())
+
+	data, err := os.ReadFile(path)
+	require.NoError(t, err)
+	assert.True(t, strings.HasPrefix(string(data), "existing\n"))
+}
+
+func TestFileObserver_FailsOnBadPath(t *testing.T) {
+	_, err := NewFileObserver(filepath.Join(t.TempDir(), "no-such-dir", "audit.log"))
+	assert.Error(t, err)
+}
+
+func TestFileObserver_WriteAfterClose(t *testing.T) {
+	o, err := NewFileObserver(filepath.Join(t.TempDir(), "audit.log"))
+	require.NoError(t, err)
+	require.NoError(t, o.Close())
+
+	assert.Error(t, o.WriteEvent(testEvent))
 }
 
 func TestHTTPObserver(t *testing.T) {
@@ -132,4 +161,41 @@ func TestAsyncObserver(t *testing.T) {
 		assert.Error(t, a.WriteEvent(testEvent))
 		assert.NoError(t, a.Close()) // Idempotent.
 	})
+
+	t.Run("closes the wrapped observer once after delivering events", func(t *testing.T) {
+		inner := &closingObserver{}
+		a := NewAsyncObserver(inner, 10)
+		require.NoError(t, a.WriteEvent(testEvent))
+
+		require.NoError(t, a.Close())
+		require.NoError(t, a.Close())
+
+		assert.Equal(t, 1, inner.closes)
+		assert.True(t, inner.wroteBeforeClose)
+	})
+
+	t.Run("returns the close error of the wrapped observer", func(t *testing.T) {
+		a := NewAsyncObserver(&closingObserver{closeErr: errors.New("close failed")}, 1)
+
+		assert.Error(t, a.Close())
+		assert.Error(t, a.Close()) // The first result is kept.
+	})
+}
+
+type closingObserver struct {
+	writes           int
+	closes           int
+	wroteBeforeClose bool
+	closeErr         error
+}
+
+func (c *closingObserver) WriteEvent(*Event) error {
+	c.writes++
+	return nil
+}
+
+func (c *closingObserver) Close() error {
+	c.closes++
+	c.wroteBeforeClose = c.writes > 0
+	return c.closeErr
 }

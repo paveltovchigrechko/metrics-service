@@ -18,15 +18,21 @@ type Observer interface {
 }
 
 // FileObserver appends each event as a JSON line to the file.
+// The file stays open until Close.
 type FileObserver struct {
-	mu   sync.Mutex
-	path string
+	mu   sync.Mutex // Keeps each line in a single write.
+	file *os.File
 }
 
-func NewFileObserver(path string) *FileObserver {
-	return &FileObserver{
-		path: path,
+// NewFileObserver opens the file for appending, creating it if needed.
+// It returns an error if the file cannot be opened.
+func NewFileObserver(path string) (*FileObserver, error) {
+	file, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0600)
+	if err != nil {
+		return nil, fmt.Errorf("open audit file: %w", err)
 	}
+
+	return &FileObserver{file: file}, nil
 }
 
 func (f *FileObserver) WriteEvent(event *Event) error {
@@ -39,17 +45,16 @@ func (f *FileObserver) WriteEvent(event *Event) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	file, err := os.OpenFile(f.path, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0600)
-	if err != nil {
-		return err
-	}
+	_, err = f.file.Write(data)
+	return err
+}
 
-	if _, err = file.Write(data); err != nil {
-		file.Close()
-		return err
-	}
+// Close closes the file. Events written after Close return an error.
+func (f *FileObserver) Close() error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 
-	return file.Close()
+	return f.file.Close()
 }
 
 // HTTPObserver sends each event with a POST request to the URL.

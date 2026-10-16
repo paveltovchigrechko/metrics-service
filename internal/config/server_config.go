@@ -144,8 +144,8 @@ func createServerFlagConfig(args []string) (*ServerConfig, error) {
 	}
 
 	storeInt := time.Duration(*storeInterval) * time.Second
-	cleanedAuditFilePath := strings.Trim(*auditFilePath, " ")
-	cleanedAuditURL := strings.Trim(*auditURL, " ")
+	cleanedAuditFilePath := strings.TrimSpace(*auditFilePath)
+	cleanedAuditURL := strings.TrimSpace(*auditURL)
 
 	cfg := &ServerConfig{
 		ServerAddress:   *address,
