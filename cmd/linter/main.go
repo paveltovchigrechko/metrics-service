@@ -1,11 +1,7 @@
 package main
 
-import "golang.org/x/tools/go/analysis/multichecker"
+import "golang.org/x/tools/go/analysis/singlechecker"
 
 func main() {
-	multichecker.Main(
-		PanicAnalyzer,
-		LogFatalAnalyzer,
-		OsExitAnalyzer,
-	)
+	singlechecker.Main(Analyzer)
 }

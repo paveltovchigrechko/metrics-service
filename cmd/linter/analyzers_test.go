@@ -8,19 +8,12 @@ import (
 )
 
 func TestAnalyzersAreValid(t *testing.T) {
-	if err := analysis.Validate([]*analysis.Analyzer{PanicAnalyzer, LogFatalAnalyzer, OsExitAnalyzer}); err != nil {
+	if err := analysis.Validate([]*analysis.Analyzer{Analyzer}); err != nil {
 		t.Fatal(err)
 	}
 }
 
-func TestPanicAnalyzer(t *testing.T) {
-	analysistest.Run(t, analysistest.TestData(), PanicAnalyzer, "panics")
-}
-
-func TestLogFatalAnalyzer(t *testing.T) {
-	analysistest.Run(t, analysistest.TestData(), LogFatalAnalyzer, "logfatal", "logfatallib")
-}
-
-func TestOsExitAnalyzer(t *testing.T) {
-	analysistest.Run(t, analysistest.TestData(), OsExitAnalyzer, "osexit", "osexitlib")
+func TestAnalyzer(t *testing.T) {
+	analysistest.Run(t, analysistest.TestData(), Analyzer,
+		"panics", "logfatal", "logfatallib", "osexit", "osexitlib")
 }

@@ -7,10 +7,23 @@ import (
 	"golang.org/x/tools/go/analysis"
 )
 
-var PanicAnalyzer = &analysis.Analyzer{
-	Name: "nopanic",
-	Doc:  "reports usage of the in-build panic function",
-	Run:  checkPanicUsage,
+var Analyzer = &analysis.Analyzer{
+	Name: "exitcheck",
+	Doc:  "reports panic calls, and log.Fatal and os.Exit calls outside the main function of the main package",
+	Run:  runAll,
+}
+
+func runAll(pass *analysis.Pass) (any, error) {
+	for _, check := range []func(*analysis.Pass) (any, error){
+		checkPanicUsage,
+		checkLogFatalUsage,
+		checkOsExitUsage,
+	} {
+		if _, err := check(pass); err != nil {
+			return nil, err
+		}
+	}
+	return nil, nil
 }
 
 var builtinPanic = types.Universe.Lookup("panic")
@@ -31,12 +44,6 @@ func checkPanicUsage(pass *analysis.Pass) (any, error) {
 		})
 	}
 	return nil, nil
-}
-
-var LogFatalAnalyzer = &analysis.Analyzer{
-	Name: "nologfatal",
-	Doc:  "reports log.Fatal calls outside the main function of the main package",
-	Run:  checkLogFatalUsage,
 }
 
 func checkLogFatalUsage(pass *analysis.Pass) (any, error) {
@@ -69,12 +76,6 @@ func checkLogFatalUsage(pass *analysis.Pass) (any, error) {
 		}
 	}
 	return nil, nil
-}
-
-var OsExitAnalyzer = &analysis.Analyzer{
-	Name: "noosexit",
-	Doc:  "reports os.Exit calls outside the main function of the main package",
-	Run:  checkOsExitUsage,
 }
 
 func checkOsExitUsage(pass *analysis.Pass) (any, error) {
