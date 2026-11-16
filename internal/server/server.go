@@ -29,7 +29,7 @@ const (
 	shutdownTimeout = 5 * time.Second
 
 	readHeaderTimeout = 5 * time.Second
-	idleTimeout = 120 * time.Second
+	idleTimeout       = 120 * time.Second
 )
 
 type storageMode int

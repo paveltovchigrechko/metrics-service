@@ -15,6 +15,7 @@ type AgentConfig struct {
 	PollInterval   time.Duration
 	Key            string
 	RateLimit      int
+	CryptoKey      string // Path to the PEM file with the server public key. Empty disables encryption.
 }
 
 type envAgentConfig struct {
@@ -23,6 +24,7 @@ type envAgentConfig struct {
 	PollInterval   *int    `env:"POLL_INTERVAL"`
 	Key            *string `env:"KEY"`
 	RateLimit      *int    `env:"RATE_LIMIT"`
+	CryptoKey      *string `env:"CRYPTO_KEY"`
 }
 
 const (
@@ -31,6 +33,7 @@ const (
 	pollIntervalFlag   = "p"
 	keyFlag            = "k"
 	rateLimitFlag      = "l"
+	cryptoKeyFlag      = "crypto-key"
 
 	defaultServerAddress  = "localhost:8080"
 	defaultReportInterval = 10
@@ -96,6 +99,11 @@ func mergeAgentConfigs(envCfg *envAgentConfig, flagCfg *AgentConfig) *AgentConfi
 		flagCfg.RateLimit = *envCfg.RateLimit
 	}
 
+	// Set crypto key path
+	if envCfg.CryptoKey != nil {
+		flagCfg.CryptoKey = strings.TrimSpace(*envCfg.CryptoKey)
+	}
+
 	return flagCfg
 }
 
@@ -107,6 +115,7 @@ func createAgentFlagConfig(args []string) (*AgentConfig, error) {
 	pollSeconds := fs.Int(pollIntervalFlag, defaultPollInterval, "Metrics update frequency (seconds)")
 	key := fs.String(keyFlag, defaultKey, "Encrypting key")
 	rateLimit := fs.Int(rateLimitFlag, defaultRateLimit, "Number of concurrent requests")
+	cryptoKey := fs.String(cryptoKeyFlag, "", "Path to the PEM file with the server public key to encrypt metrics")
 
 	err := fs.Parse(args)
 	if err != nil {
@@ -122,6 +131,7 @@ func createAgentFlagConfig(args []string) (*AgentConfig, error) {
 		PollInterval:   pollInterval,
 		Key:            *key,
 		RateLimit:      *rateLimit,
+		CryptoKey:      strings.TrimSpace(*cryptoKey),
 	}, nil
 }
 

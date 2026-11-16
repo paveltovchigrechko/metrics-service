@@ -42,6 +42,7 @@ type ServerConfig struct {
 	Key             string
 	AuditFilePath   string // File path to store audit logs.
 	AuditURL        string // URL to send audit logs.
+	CryptoKey       string // Path to the PEM file with the private key to decrypt agent requests.
 }
 
 // envServerCongig stores the environment variables. All fields are pointers to distinguish if a value was set.
@@ -54,6 +55,7 @@ type envServerConfig struct {
 	Key             *string `env:"KEY"`
 	AuditFilePath   *string `env:"AUDIT_FILE"`
 	AuditURL        *string `env:"AUDIT_URL"`
+	CryptoKey       *string `env:"CRYPTO_KEY"`
 }
 
 // SetSeverConfig returns the final ServerConfig to use.
@@ -122,6 +124,11 @@ func mergeServerConfigs(envCfg *envServerConfig, flagCfg *ServerConfig) *ServerC
 		flagCfg.AuditURL = *envCfg.AuditURL
 	}
 
+	// Set crypto key path
+	if envCfg.CryptoKey != nil {
+		flagCfg.CryptoKey = strings.TrimSpace(*envCfg.CryptoKey)
+	}
+
 	return flagCfg
 }
 
@@ -137,6 +144,7 @@ func createServerFlagConfig(args []string) (*ServerConfig, error) {
 	key := fs.String(secretKeyFlag, defaultSecretKey, "Secret key to encrypt data")
 	auditFilePath := fs.String(auditFilePathFlag, "", "File path to store audit logs")
 	auditURL := fs.String(auditURLFlag, "", "URL to send audit logs")
+	cryptoKey := fs.String(cryptoKeyFlag, "", "Path to the PEM file with the private key to decrypt agent requests")
 
 	err := fs.Parse(args)
 	if err != nil {
@@ -156,6 +164,7 @@ func createServerFlagConfig(args []string) (*ServerConfig, error) {
 		Key:             *key,
 		AuditFilePath:   cleanedAuditFilePath,
 		AuditURL:        cleanedAuditURL,
+		CryptoKey:       strings.TrimSpace(*cryptoKey),
 	}
 
 	return cfg, nil

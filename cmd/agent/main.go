@@ -31,6 +31,9 @@ func main() {
 
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
-	agent := agent.NewAgent(cfg)
+	agent, err := agent.NewAgent(cfg)
+	if err != nil {
+		log.Fatal(err)
+	}
 	agent.Run(ctx)
 }

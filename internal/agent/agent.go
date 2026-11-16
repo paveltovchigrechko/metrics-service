@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"crypto/rsa"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -16,6 +17,7 @@ import (
 
 	"github.com/go-resty/resty/v2"
 	"github.com/paveltovchigrechko/metrics-service/internal/config"
+	"github.com/paveltovchigrechko/metrics-service/internal/encryption"
 	"github.com/paveltovchigrechko/metrics-service/internal/hashing"
 	"github.com/paveltovchigrechko/metrics-service/internal/model"
 	"github.com/shirou/gopsutil/v4/cpu"
@@ -30,10 +32,11 @@ const (
 )
 
 type Agent struct {
-	m      *runtime.MemStats
-	client *resty.Client
-	cfg    *config.AgentConfig
-	mu     sync.Mutex
+	m         *runtime.MemStats
+	client    *resty.Client
+	cfg       *config.AgentConfig
+	publicKey *rsa.PublicKey // nil when encryption is disabled
+	mu        sync.Mutex
 
 	// Runtime metrics
 	Alloc         uint64
@@ -73,7 +76,18 @@ type Agent struct {
 	CPUUtilizations []float64
 }
 
-func NewAgent(cfg *config.AgentConfig) *Agent {
+// NewAgent creates an agent for cfg. If cfg.CryptoKey is set, it loads the
+// public key from that file and encrypts every request sent to the server.
+func NewAgent(cfg *config.AgentConfig) (*Agent, error) {
+	var publicKey *rsa.PublicKey
+	if cfg.CryptoKey != "" {
+		var err error
+		publicKey, err = encryption.LoadPublicKey(cfg.CryptoKey)
+		if err != nil {
+			return nil, fmt.Errorf("load crypto key: %w", err)
+		}
+	}
+
 	m := new(runtime.MemStats)
 
 	c := resty.New().
@@ -89,9 +103,10 @@ func NewAgent(cfg *config.AgentConfig) *Agent {
 		m:           m,
 		client:      c,
 		cfg:         cfg,
+		publicKey:   publicKey,
 		PollCount:   0,
 		RandomValue: calcNewRandomValue(),
-	}
+	}, nil
 }
 
 func (a *Agent) Run(ctx context.Context) {
@@ -517,6 +532,17 @@ func (a *Agent) sendMetricsJSON(metrics []model.Metrics, gzipCompressed bool) er
 
 		req.SetHeader("Content-Encoding", gzipEncoding)
 		payload = compressedBytes
+	}
+
+	// The hash is calculated over the encrypted payload, so encrypt first.
+	if a.publicKey != nil {
+		encrypted, err := encryption.Encrypt(a.publicKey, payload)
+		if err != nil {
+			return fmt.Errorf("encrypt metrics: %w", err)
+		}
+
+		req.SetHeader(encryption.Header, encryption.Scheme)
+		payload = encrypted
 	}
 
 	// check if we need hashing
