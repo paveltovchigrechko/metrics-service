@@ -116,20 +116,11 @@ func (a *Agent) Run(ctx context.Context) {
 
 	for i := 0; i < a.cfg.RateLimit; i++ {
 		wg.Add(1)
-		// RateLimit goroutines that read channel with metrics and send them.
 		go func() {
 			defer wg.Done()
-			for {
-				select {
-				case <-ctx.Done():
-					return
-				case metrics, ok := <-metricsChan:
-					if !ok {
-						return
-					}
-					if err := a.sendMetricsJSON(metrics, true); err != nil {
-						log.Printf("failed to send metrics: %v", err)
-					}
+			for metrics := range metricsChan {
+				if err := a.sendMetricsJSON(metrics, true); err != nil {
+					log.Printf("failed to send metrics: %v", err)
 				}
 			}
 		}()
@@ -138,7 +129,8 @@ func (a *Agent) Run(ctx context.Context) {
 	// Separate goroutines for runtime and PSU metrics and reporting.
 	go a.collectRuntimeMetrics(ctx, a.cfg.PollInterval)
 	go a.collectPSUMetrics(ctx, a.cfg.PollInterval)
-	go a.startReporting(ctx, a.cfg.ReportInterval, metricsChan)
+	a.startReporting(ctx, a.cfg.ReportInterval, metricsChan)
+	close(metricsChan)
 	wg.Wait()
 }
 
@@ -187,6 +179,7 @@ func (a *Agent) startReporting(ctx context.Context, interval time.Duration, metr
 			select {
 			case metricsChan <- metrics:
 			case <-ctx.Done():
+				metricsChan <- metrics
 				return
 			}
 		}

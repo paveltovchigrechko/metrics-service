@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -220,7 +221,9 @@ func TestServer_runStoreLoop(t *testing.T) {
 	require.NoError(t, err)
 
 	// Start the storage loop in a separate goroutine
-	go srv.runStoreLoop()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go srv.runStoreLoop(ctx)
 
 	// Poll the file until it has been successfully written and contains the data we expect
 	assert.Eventually(t, func() bool {
@@ -241,6 +244,67 @@ func TestServer_runStoreLoop(t *testing.T) {
 
 		return false
 	}, time.Second*2, time.Millisecond*5, "The storage loop did not save the metrics correctly to disk in time")
+}
+
+func TestServe_SavesFileOnShutdown(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "metrics.json")
+	addr := freeAddr(t)
+	cfg := &config.ServerConfig{
+		ServerAddress:   addr,
+		StoreInterval:   time.Hour, // The ticker must not be what writes the file.
+		FileStoragePath: path,
+		Restore:         false,
+	}
+
+	srv, err := New(cfg)
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() {
+		done <- srv.serve(ctx)
+	}()
+
+	require.Eventually(t, func() bool {
+		resp, postErr := http.Post("http://"+addr+"/update/counter/Hits/5", "text/plain", nil)
+		if postErr != nil {
+			return false
+		}
+		resp.Body.Close()
+		return resp.StatusCode == http.StatusOK
+	}, 2*time.Second, 10*time.Millisecond)
+
+	_, err = os.Stat(path)
+	require.ErrorIs(t, err, os.ErrNotExist)
+
+	cancel()
+
+	select {
+	case err := <-done:
+		require.NoError(t, err)
+	case <-time.After(3 * time.Second):
+		t.Fatal("server did not return after shutdown")
+	}
+
+	data, err := os.ReadFile(path)
+	require.NoError(t, err)
+
+	var saved []model.Metrics
+	require.NoError(t, json.Unmarshal(data, &saved))
+	require.Len(t, saved, 1)
+	assert.Equal(t, "Hits", saved[0].ID)
+	assert.Equal(t, int64(5), *saved[0].Delta)
+}
+
+func freeAddr(t *testing.T) string {
+	t.Helper()
+
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	addr := listener.Addr().String()
+	require.NoError(t, listener.Close())
+
+	return addr
 }
 
 func TestServer_Audit(t *testing.T) {

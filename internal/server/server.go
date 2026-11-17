@@ -7,11 +7,13 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
@@ -146,22 +148,37 @@ func New(c *config.ServerConfig, middlewares ...func(http.Handler) http.Handler)
 }
 
 // Run listens on ServerAddress and serves requests until the process gets
-// SIGINT or SIGTERM. Then it stops accepting connections and waits up to 5
-// seconds for in-flight requests to finish.
+// SIGINT, SIGTERM or SIGQUIT. Then it stops accepting connections, waits up
+// to 5 seconds for in-flight requests to finish, and, when file storage is
+// enabled, writes every metric that is still only in memory.
 //
 // A client must send the request headers within 5 seconds, and an idle
 // keep-alive connection is closed after 2 minutes.
 //
 // Run returns nil after a clean shutdown, or the error that stopped the
-// listener or the shutdown. It does not flush audit events or close the
-// database; call StopAudit and StopDB for that.
+// listener, the shutdown or the final save. It does not flush audit events
+// or close the database; call StopAudit and StopDB for that.
 func (s *Server) Run() error {
-	if s.cfg.StoreInterval > 0 && s.fileStorage != nil {
-		go s.runStoreLoop() // Separate thread for time ticker
-	}
-
-	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 	defer stop()
+
+	return s.serve(ctx)
+}
+
+// serve runs the HTTP server and the periodic file saver until ctx is
+// cancelled or the listener stops. On the way out it saves file storage.
+func (s *Server) serve(ctx context.Context) error {
+	loopCtx, stopLoop := context.WithCancel(ctx)
+	defer stopLoop()
+
+	var storeLoop sync.WaitGroup
+	if s.cfg.StoreInterval > 0 && s.fileStorage != nil {
+		storeLoop.Add(1)
+		go func() {
+			defer storeLoop.Done()
+			s.runStoreLoop(loopCtx)
+		}()
+	}
 
 	srv := &http.Server{
 		Addr:              s.cfg.ServerAddress,
@@ -175,16 +192,31 @@ func (s *Server) Run() error {
 		errCh <- srv.ListenAndServe()
 	}()
 
+	var runErr error
 	select {
 	case err := <-errCh:
-		return err
+		runErr = err
 	case <-ctx.Done():
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
+		runErr = srv.Shutdown(shutdownCtx)
+		cancel()
 	}
 
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
-	defer cancel()
+	// The periodic saver and the final write must not share the file.
+	stopLoop()
+	storeLoop.Wait()
 
-	return srv.Shutdown(shutdownCtx)
+	if s.fileStorage != nil {
+		if err := s.fileStorage.Save(s.storage); err != nil {
+			err = fmt.Errorf("save metrics: %w", err)
+			if runErr != nil {
+				return errors.Join(runErr, err)
+			}
+			return err
+		}
+	}
+
+	return runErr
 }
 
 // StopAudit waits until all queued audit events are delivered and stops the
@@ -224,13 +256,18 @@ func (s *Server) setHandlers() {
 	s.router.Get("/ping", s.handler.PingEndpoint)
 }
 
-func (s *Server) runStoreLoop() {
+func (s *Server) runStoreLoop(ctx context.Context) {
 	ticker := time.NewTicker(s.cfg.StoreInterval)
 	defer ticker.Stop()
 
-	for range ticker.C {
-		if err := s.fileStorage.Save(s.storage); err != nil {
-			log.Printf("save metrics error: %v", err)
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			if err := s.fileStorage.Save(s.storage); err != nil {
+				log.Printf("save metrics error: %v", err)
+			}
 		}
 	}
 }

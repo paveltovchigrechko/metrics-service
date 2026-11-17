@@ -60,8 +60,6 @@ type envServerConfig struct {
 }
 
 // SetServerConfig returns the server configuration for args.
-// Sources are applied from lowest priority to highest: the JSON config file,
-// then flags that were actually passed, then environment variables.
 // The file path comes from -c/-config or CONFIG, and CONFIG wins when both are set.
 func SetServerConfig(args []string) (*ServerConfig, error) {
 	envCfg, err := parseEnvServerConfig()
