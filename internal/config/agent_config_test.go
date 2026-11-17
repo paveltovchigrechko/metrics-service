@@ -84,6 +84,7 @@ func TestSetAgentConfig_Success(t *testing.T) {
 			t.Setenv("KEY", "")
 			t.Setenv("RATE_LIMIT", "")
 			t.Setenv("CRYPTO_KEY", "")
+			t.Setenv("CONFIG", "")
 
 			for k, v := range tc.envVars {
 				t.Setenv(k, v)
@@ -104,6 +105,8 @@ func TestSetAgentConfig_Success(t *testing.T) {
 }
 
 func TestSetAgentConfig_Failures(t *testing.T) {
+	t.Setenv("CONFIG", "")
+
 	t.Run("fails on invalid flag structure", func(t *testing.T) {
 		cfg, err := SetAgentConfig([]string{"-invalid-arg"})
 		assert.Error(t, err)
@@ -149,7 +152,7 @@ func TestSetAgentConfig_Failures(t *testing.T) {
 func TestCreateAgentFlagConfig(t *testing.T) {
 	t.Run("should correctly parse flag options into agent config struct", func(t *testing.T) {
 		args := []string{"-a", "10.0.0.1:1337", "-r", "60", "-p", "12", "-k", "key", "-l", "10", "-crypto-key", "/keys/public.pem"}
-		cfg, err := createAgentFlagConfig(args)
+		cfg, _, _, err := createAgentFlagConfig(args)
 
 		require.NoError(t, err)
 		require.NotNil(t, cfg)
@@ -190,6 +193,7 @@ func TestCreateAgentEnvConfig(t *testing.T) {
 		t.Setenv("KEY", "")
 		t.Setenv("RATE_LIMIT", "")
 		t.Setenv("CRYPTO_KEY", "")
+		t.Setenv("CONFIG", "")
 
 		envCfg, err := createAgentEnvConfig()
 		require.NoError(t, err)
@@ -201,6 +205,7 @@ func TestCreateAgentEnvConfig(t *testing.T) {
 		assert.Nil(t, envCfg.Key)
 		assert.Nil(t, envCfg.RateLimit)
 		assert.Nil(t, envCfg.CryptoKey)
+		assert.Nil(t, envCfg.Config)
 	})
 }
 

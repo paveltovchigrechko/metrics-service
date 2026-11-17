@@ -105,6 +105,7 @@ func TestSetServerConfig_Positive(t *testing.T) {
 			t.Setenv("AUDIT_FILE", "")
 			t.Setenv("AUDIT_URL", "")
 			t.Setenv("CRYPTO_KEY", "")
+			t.Setenv("CONFIG", "")
 
 			for k, v := range tc.envVars {
 				t.Setenv(k, v)
@@ -128,6 +129,8 @@ func TestSetServerConfig_Positive(t *testing.T) {
 }
 
 func TestSetServerConfig_Negative(t *testing.T) {
+	t.Setenv("CONFIG", "")
+
 	t.Run("returns error when an invalid flag is passed", func(t *testing.T) {
 		cfg, err := SetServerConfig([]string{"-invalid-flag-structure"})
 		assert.Error(t, err)
@@ -166,7 +169,7 @@ func TestSetServerConfig_Negative(t *testing.T) {
 func TestCreateServerFlagConfig(t *testing.T) {
 	t.Run("should parse custom flags successfully", func(t *testing.T) {
 		args := []string{"-a", "127.0.0.1:4444", "-i", "120", "-f", "flag_test.json", "-r=false", "-d", "db_address", "-k", "key", "--audit-file", "audit-file-path", "--audit-url", "audit-url", "--crypto-key", "/keys/private.pem"}
-		cfg, err := createServerFlagConfig(args)
+		cfg, _, _, err := createServerFlagConfig(args)
 
 		require.NoError(t, err)
 		require.NotNil(t, cfg)
@@ -183,7 +186,7 @@ func TestCreateServerFlagConfig(t *testing.T) {
 
 	t.Run("should return error on invalid flags", func(t *testing.T) {
 		args := []string{"-unsupported-flag"}
-		cfg, err := createServerFlagConfig(args)
+		cfg, _, _, err := createServerFlagConfig(args)
 
 		assert.Error(t, err)
 		assert.Nil(t, cfg)
@@ -228,6 +231,7 @@ func TestCreateEnvConfig(t *testing.T) {
 		t.Setenv("AUDIT_FILE", "")
 		t.Setenv("AUDIT_URL", "")
 		t.Setenv("CRYPTO_KEY", "")
+		t.Setenv("CONFIG", "")
 
 		envCfg, err := parseEnvServerConfig()
 
@@ -242,6 +246,7 @@ func TestCreateEnvConfig(t *testing.T) {
 		assert.Nil(t, envCfg.AuditFilePath)
 		assert.Nil(t, envCfg.AuditURL)
 		assert.Nil(t, envCfg.CryptoKey)
+		assert.Nil(t, envCfg.Config)
 	})
 }
 
