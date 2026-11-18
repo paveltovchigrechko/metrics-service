@@ -27,7 +27,7 @@ vendor/
 .vscode
 
 *.json
-!profile/*.json
+!profiles/*.json
 *.sh
 !scripts/gen-keys.sh
 *.lua
