@@ -42,6 +42,7 @@ type ServerConfig struct {
 	Key             string
 	AuditFilePath   string // File path to store audit logs.
 	AuditURL        string // URL to send audit logs.
+	CryptoKey       string // Path to the PEM file with the private key to decrypt agent requests.
 }
 
 // envServerCongig stores the environment variables. All fields are pointers to distinguish if a value was set.
@@ -54,18 +55,28 @@ type envServerConfig struct {
 	Key             *string `env:"KEY"`
 	AuditFilePath   *string `env:"AUDIT_FILE"`
 	AuditURL        *string `env:"AUDIT_URL"`
+	CryptoKey       *string `env:"CRYPTO_KEY"`
+	Config          *string `env:"CONFIG"`
 }
 
-// SetSeverConfig returns the final ServerConfig to use.
-// The function uses environment and flag configurations to merge into the final one.
+// SetServerConfig returns the server configuration for args.
+// The file path comes from -c/-config or CONFIG, and CONFIG wins when both are set.
 func SetServerConfig(args []string) (*ServerConfig, error) {
 	envCfg, err := parseEnvServerConfig()
 	if err != nil {
 		return nil, err
 	}
 
-	flagCfg, err := createServerFlagConfig(args)
+	flagCfg, explicit, flagPath, err := createServerFlagConfig(args)
 	if err != nil {
+		return nil, err
+	}
+
+	var fileCfg fileServerConfig
+	if err := loadFileConfig(configFilePath(flagPath, envCfg.Config), &fileCfg); err != nil {
+		return nil, err
+	}
+	if err := applyServerFileConfig(flagCfg, &fileCfg, explicit); err != nil {
 		return nil, err
 	}
 
@@ -122,11 +133,18 @@ func mergeServerConfigs(envCfg *envServerConfig, flagCfg *ServerConfig) *ServerC
 		flagCfg.AuditURL = *envCfg.AuditURL
 	}
 
+	// Set crypto key path
+	if envCfg.CryptoKey != nil {
+		flagCfg.CryptoKey = strings.TrimSpace(*envCfg.CryptoKey)
+	}
+
 	return flagCfg
 }
 
-// createServerFlagConfig parses the arguments and returns ServerConfig. The function doesn't validate parsed values.
-func createServerFlagConfig(args []string) (*ServerConfig, error) {
+// createServerFlagConfig parses args into a ServerConfig. explicit contains the
+// names of flags present on the command line, and configPath is the -c/-config
+// value. Parsed values are not validated.
+func createServerFlagConfig(args []string) (cfg *ServerConfig, explicit map[string]bool, configPath string, err error) {
 	fs := flag.NewFlagSet("server", flag.ContinueOnError)
 
 	address := fs.String(serverAddressFlag, defaultAddress, "Metrics server HTTP address and port")
@@ -137,17 +155,24 @@ func createServerFlagConfig(args []string) (*ServerConfig, error) {
 	key := fs.String(secretKeyFlag, defaultSecretKey, "Secret key to encrypt data")
 	auditFilePath := fs.String(auditFilePathFlag, "", "File path to store audit logs")
 	auditURL := fs.String(auditURLFlag, "", "URL to send audit logs")
+	cryptoKey := fs.String(cryptoKeyFlag, "", "Path to the PEM file with the private key to decrypt agent requests")
+	configPathFlag := fs.String(configFlagShort, "", "Path to the JSON configuration file")
+	fs.StringVar(configPathFlag, configFlagLong, "", "Path to the JSON configuration file")
 
-	err := fs.Parse(args)
-	if err != nil {
-		return nil, err
+	if err := fs.Parse(args); err != nil {
+		return nil, nil, "", err
 	}
+
+	explicit = map[string]bool{}
+	fs.Visit(func(f *flag.Flag) {
+		explicit[f.Name] = true
+	})
 
 	storeInt := time.Duration(*storeInterval) * time.Second
 	cleanedAuditFilePath := strings.TrimSpace(*auditFilePath)
 	cleanedAuditURL := strings.TrimSpace(*auditURL)
 
-	cfg := &ServerConfig{
+	cfg = &ServerConfig{
 		ServerAddress:   *address,
 		StoreInterval:   storeInt,
 		FileStoragePath: *fileStoragePath,
@@ -156,9 +181,10 @@ func createServerFlagConfig(args []string) (*ServerConfig, error) {
 		Key:             *key,
 		AuditFilePath:   cleanedAuditFilePath,
 		AuditURL:        cleanedAuditURL,
+		CryptoKey:       strings.TrimSpace(*cryptoKey),
 	}
 
-	return cfg, nil
+	return cfg, explicit, strings.TrimSpace(*configPathFlag), nil
 }
 
 // parseEnvServerConfig parses the environment variables, validates string values for empty values, and returns envServerConfig.

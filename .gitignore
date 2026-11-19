@@ -26,6 +26,12 @@ vendor/
 .idea
 .vscode
 
-!profile/*.json
+*.json
+!profiles/*.json
 *.sh
+!scripts/gen-keys.sh
 *.lua
+
+# RSA keys produced by scripts/gen-keys.sh
+*.pem
+.DS_Store

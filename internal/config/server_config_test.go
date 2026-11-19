@@ -21,6 +21,7 @@ func TestSetServerConfig_Positive(t *testing.T) {
 		wantKey           string
 		wantAuditFilePath string
 		wantAuditURL      string
+		wantCryptoKey     string
 	}{
 		{
 			name:              "Default values when no env or flags are set",
@@ -34,10 +35,11 @@ func TestSetServerConfig_Positive(t *testing.T) {
 			wantKey:           "",
 			wantAuditFilePath: "",
 			wantAuditURL:      "",
+			wantCryptoKey:     "",
 		},
 		{
 			name:              "Flags are parsed correctly when no env is present",
-			args:              []string{"-a", "127.0.0.1:9090", "-i", "10", "-f", "test.json", "-r=false", "-d", "db_address", "-k", "key", "--audit-file", "audit-file-path", "--audit-url", "audit-url"},
+			args:              []string{"-a", "127.0.0.1:9090", "-i", "10", "-f", "test.json", "-r=false", "-d", "db_address", "-k", "key", "--audit-file", "audit-file-path", "--audit-url", "audit-url", "--crypto-key", "/keys/private.pem"},
 			envVars:           map[string]string{},
 			wantAddr:          "127.0.0.1:9090",
 			wantInterval:      10 * time.Second,
@@ -47,10 +49,11 @@ func TestSetServerConfig_Positive(t *testing.T) {
 			wantKey:           "key",
 			wantAuditFilePath: "audit-file-path",
 			wantAuditURL:      "audit-url",
+			wantCryptoKey:     "/keys/private.pem",
 		},
 		{
 			name: "Env variables override flags completely",
-			args: []string{"-a", "127.0.0.1:9090", "-i", "10", "-f", "test.json", "-r=false", "-d", "db_address", "-k", "key", "--audit-file", "audit-file-path", "--audit-url", "audit-url"},
+			args: []string{"-a", "127.0.0.1:9090", "-i", "10", "-f", "test.json", "-r=false", "-d", "db_address", "-k", "key", "--audit-file", "audit-file-path", "--audit-url", "audit-url", "--crypto-key", "/keys/private.pem"},
 			envVars: map[string]string{
 				"ADDRESS":           "0.0.0.0:3000",
 				"STORE_INTERVAL":    "15",
@@ -60,6 +63,7 @@ func TestSetServerConfig_Positive(t *testing.T) {
 				"KEY":               "env key",
 				"AUDIT_FILE":        "env_audit-file-path",
 				"AUDIT_URL":         "env_audit-url",
+				"CRYPTO_KEY":        "/env/private.pem",
 			},
 			wantAddr:          "0.0.0.0:3000",
 			wantInterval:      15 * time.Second,
@@ -69,10 +73,11 @@ func TestSetServerConfig_Positive(t *testing.T) {
 			wantKey:           "env key",
 			wantAuditFilePath: "env_audit-file-path",
 			wantAuditURL:      "env_audit-url",
+			wantCryptoKey:     "/env/private.pem",
 		},
 		{
 			name: "Partial Env overrides only specific flags",
-			args: []string{"-a", "127.0.0.1:9090", "-i", "10", "-d", "flag_db_address", "-k", "key", "--audit-file", "audit-file-path", "--audit-url", "audit-url"},
+			args: []string{"-a", "127.0.0.1:9090", "-i", "10", "-d", "flag_db_address", "-k", "key", "--audit-file", "audit-file-path", "--audit-url", "audit-url", "--crypto-key", "/keys/private.pem"},
 			envVars: map[string]string{
 				"ADDRESS": "0.0.0.0:3000",
 			},
@@ -84,6 +89,7 @@ func TestSetServerConfig_Positive(t *testing.T) {
 			wantKey:           "key",
 			wantAuditFilePath: "audit-file-path",
 			wantAuditURL:      "audit-url",
+			wantCryptoKey:     "/keys/private.pem",
 		},
 	}
 
@@ -98,6 +104,8 @@ func TestSetServerConfig_Positive(t *testing.T) {
 			t.Setenv("KEY", "")
 			t.Setenv("AUDIT_FILE", "")
 			t.Setenv("AUDIT_URL", "")
+			t.Setenv("CRYPTO_KEY", "")
+			t.Setenv("CONFIG", "")
 
 			for k, v := range tc.envVars {
 				t.Setenv(k, v)
@@ -115,11 +123,14 @@ func TestSetServerConfig_Positive(t *testing.T) {
 			assert.Equal(t, tc.wantKey, cfg.Key)
 			assert.Equal(t, tc.wantAuditFilePath, cfg.AuditFilePath)
 			assert.Equal(t, tc.wantAuditURL, cfg.AuditURL)
+			assert.Equal(t, tc.wantCryptoKey, cfg.CryptoKey)
 		})
 	}
 }
 
 func TestSetServerConfig_Negative(t *testing.T) {
+	t.Setenv("CONFIG", "")
+
 	t.Run("returns error when an invalid flag is passed", func(t *testing.T) {
 		cfg, err := SetServerConfig([]string{"-invalid-flag-structure"})
 		assert.Error(t, err)
@@ -157,8 +168,8 @@ func TestSetServerConfig_Negative(t *testing.T) {
 
 func TestCreateServerFlagConfig(t *testing.T) {
 	t.Run("should parse custom flags successfully", func(t *testing.T) {
-		args := []string{"-a", "127.0.0.1:4444", "-i", "120", "-f", "flag_test.json", "-r=false", "-d", "db_address", "-k", "key", "--audit-file", "audit-file-path", "--audit-url", "audit-url"}
-		cfg, err := createServerFlagConfig(args)
+		args := []string{"-a", "127.0.0.1:4444", "-i", "120", "-f", "flag_test.json", "-r=false", "-d", "db_address", "-k", "key", "--audit-file", "audit-file-path", "--audit-url", "audit-url", "--crypto-key", "/keys/private.pem"}
+		cfg, _, _, err := createServerFlagConfig(args)
 
 		require.NoError(t, err)
 		require.NotNil(t, cfg)
@@ -170,11 +181,12 @@ func TestCreateServerFlagConfig(t *testing.T) {
 		assert.Equal(t, "key", cfg.Key)
 		assert.Equal(t, "audit-file-path", cfg.AuditFilePath)
 		assert.Equal(t, "audit-url", cfg.AuditURL)
+		assert.Equal(t, "/keys/private.pem", cfg.CryptoKey)
 	})
 
 	t.Run("should return error on invalid flags", func(t *testing.T) {
 		args := []string{"-unsupported-flag"}
-		cfg, err := createServerFlagConfig(args)
+		cfg, _, _, err := createServerFlagConfig(args)
 
 		assert.Error(t, err)
 		assert.Nil(t, cfg)
@@ -191,6 +203,7 @@ func TestCreateEnvConfig(t *testing.T) {
 		t.Setenv("KEY", "env_key")
 		t.Setenv("AUDIT_FILE", "env_audit-file")
 		t.Setenv("AUDIT_URL", "env_audit-url")
+		t.Setenv("CRYPTO_KEY", "/env/private.pem")
 
 		envCfg, err := parseEnvServerConfig()
 
@@ -205,6 +218,7 @@ func TestCreateEnvConfig(t *testing.T) {
 		assert.Equal(t, "env_key", *envCfg.Key)
 		assert.Equal(t, "env_audit-file", *envCfg.AuditFilePath)
 		assert.Equal(t, "env_audit-url", *envCfg.AuditURL)
+		assert.Equal(t, "/env/private.pem", *envCfg.CryptoKey)
 	})
 
 	t.Run("should succeed when no env vars are defined (pointers are nil)", func(t *testing.T) {
@@ -216,6 +230,8 @@ func TestCreateEnvConfig(t *testing.T) {
 		t.Setenv("KEY", "")
 		t.Setenv("AUDIT_FILE", "")
 		t.Setenv("AUDIT_URL", "")
+		t.Setenv("CRYPTO_KEY", "")
+		t.Setenv("CONFIG", "")
 
 		envCfg, err := parseEnvServerConfig()
 
@@ -229,6 +245,8 @@ func TestCreateEnvConfig(t *testing.T) {
 		assert.Nil(t, envCfg.Key)
 		assert.Nil(t, envCfg.AuditFilePath)
 		assert.Nil(t, envCfg.AuditURL)
+		assert.Nil(t, envCfg.CryptoKey)
+		assert.Nil(t, envCfg.Config)
 	})
 }
 
@@ -243,6 +261,7 @@ func TestMergeConfigs(t *testing.T) {
 			Key:             "key",
 			AuditFilePath:   "audit-file-path",
 			AuditURL:        "audit-url",
+			CryptoKey:       "/keys/private.pem",
 		}
 
 		envCfg := &envServerConfig{
@@ -254,6 +273,7 @@ func TestMergeConfigs(t *testing.T) {
 			Key:             new("env_key"),
 			AuditFilePath:   new("env_audit-file-path"),
 			AuditURL:        new("env_audit-url"),
+			CryptoKey:       new(" /env/private.pem "),
 		}
 
 		merged := mergeServerConfigs(envCfg, flagCfg)
@@ -267,6 +287,7 @@ func TestMergeConfigs(t *testing.T) {
 		assert.Equal(t, "env_key", merged.Key)
 		assert.Equal(t, "env_audit-file-path", merged.AuditFilePath)
 		assert.Equal(t, "env_audit-url", merged.AuditURL)
+		assert.Equal(t, "/env/private.pem", merged.CryptoKey, "env value is trimmed")
 	})
 
 	t.Run("should retain flag config values if env pointers are nil", func(t *testing.T) {
@@ -279,6 +300,7 @@ func TestMergeConfigs(t *testing.T) {
 			Key:             "key",
 			AuditFilePath:   "audit-file-path",
 			AuditURL:        "audit-url",
+			CryptoKey:       "/keys/private.pem",
 		}
 
 		envCfg := &envServerConfig{
@@ -290,6 +312,7 @@ func TestMergeConfigs(t *testing.T) {
 			Key:             nil,
 			AuditFilePath:   nil,
 			AuditURL:        nil,
+			CryptoKey:       nil,
 		}
 
 		merged := mergeServerConfigs(envCfg, flagCfg)
@@ -303,5 +326,6 @@ func TestMergeConfigs(t *testing.T) {
 		assert.Equal(t, "key", merged.Key)
 		assert.Equal(t, "audit-file-path", merged.AuditFilePath)
 		assert.Equal(t, "audit-url", merged.AuditURL)
+		assert.Equal(t, "/keys/private.pem", merged.CryptoKey)
 	})
 }

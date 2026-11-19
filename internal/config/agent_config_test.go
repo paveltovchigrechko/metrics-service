@@ -18,6 +18,7 @@ func TestSetAgentConfig_Success(t *testing.T) {
 		wantPoll      time.Duration
 		wantKey       string
 		wantRateLimit int
+		wantCryptoKey string
 	}{
 		{
 			name:          "Default values when no env or flags are set",
@@ -28,36 +29,40 @@ func TestSetAgentConfig_Success(t *testing.T) {
 			wantPoll:      2 * time.Second,
 			wantKey:       "",
 			wantRateLimit: 2,
+			wantCryptoKey: "",
 		},
 		{
 			name:          "Flags are parsed correctly with no env present",
-			args:          []string{"-a", "127.0.0.1:9090", "-r", "30", "-p", "5", "-k", "key", "-l", "10"},
+			args:          []string{"-a", "127.0.0.1:9090", "-r", "30", "-p", "5", "-k", "key", "-l", "10", "-crypto-key", "/keys/public.pem"},
 			envVars:       map[string]string{},
 			wantAddr:      "127.0.0.1:9090",
 			wantReport:    30 * time.Second,
 			wantPoll:      5 * time.Second,
 			wantKey:       "key",
 			wantRateLimit: 10,
+			wantCryptoKey: "/keys/public.pem",
 		},
 		{
 			name: "Env variables completely override flag configurations",
-			args: []string{"-a", "127.0.0.1:9090", "-r", "30", "-p", "5", "-k", "key", "-l", "10"},
+			args: []string{"-a", "127.0.0.1:9090", "-r", "30", "-p", "5", "-k", "key", "-l", "10", "-crypto-key", "/keys/public.pem"},
 			envVars: map[string]string{
 				"ADDRESS":         "0.0.0.0:3000",
 				"REPORT_INTERVAL": "40",
 				"POLL_INTERVAL":   "10",
 				"KEY":             "env key",
 				"RATE_LIMIT":      "5",
+				"CRYPTO_KEY":      "/env/public.pem",
 			},
 			wantAddr:      "0.0.0.0:3000",
 			wantReport:    40 * time.Second,
 			wantPoll:      10 * time.Second,
 			wantKey:       "env key",
 			wantRateLimit: 5,
+			wantCryptoKey: "/env/public.pem",
 		},
 		{
 			name: "Partial Env overrides only address",
-			args: []string{"-a", "127.0.0.1:9090", "-r", "30", "-p", "5", "-k", "key", "-l", "10"},
+			args: []string{"-a", "127.0.0.1:9090", "-r", "30", "-p", "5", "-k", "key", "-l", "10", "-crypto-key", "/keys/public.pem"},
 			envVars: map[string]string{
 				"ADDRESS": "0.0.0.0:3000",
 			},
@@ -66,6 +71,7 @@ func TestSetAgentConfig_Success(t *testing.T) {
 			wantPoll:      5 * time.Second,
 			wantKey:       "key",
 			wantRateLimit: 10,
+			wantCryptoKey: "/keys/public.pem",
 		},
 	}
 
@@ -77,6 +83,8 @@ func TestSetAgentConfig_Success(t *testing.T) {
 			t.Setenv("POLL_INTERVAL", "")
 			t.Setenv("KEY", "")
 			t.Setenv("RATE_LIMIT", "")
+			t.Setenv("CRYPTO_KEY", "")
+			t.Setenv("CONFIG", "")
 
 			for k, v := range tc.envVars {
 				t.Setenv(k, v)
@@ -89,12 +97,16 @@ func TestSetAgentConfig_Success(t *testing.T) {
 			assert.Equal(t, tc.wantAddr, cfg.ServerAddress)
 			assert.Equal(t, tc.wantReport, cfg.ReportInterval)
 			assert.Equal(t, tc.wantPoll, cfg.PollInterval)
+			assert.Equal(t, tc.wantKey, cfg.Key)
 			assert.Equal(t, tc.wantRateLimit, cfg.RateLimit)
+			assert.Equal(t, tc.wantCryptoKey, cfg.CryptoKey)
 		})
 	}
 }
 
 func TestSetAgentConfig_Failures(t *testing.T) {
+	t.Setenv("CONFIG", "")
+
 	t.Run("fails on invalid flag structure", func(t *testing.T) {
 		cfg, err := SetAgentConfig([]string{"-invalid-arg"})
 		assert.Error(t, err)
@@ -139,8 +151,8 @@ func TestSetAgentConfig_Failures(t *testing.T) {
 
 func TestCreateAgentFlagConfig(t *testing.T) {
 	t.Run("should correctly parse flag options into agent config struct", func(t *testing.T) {
-		args := []string{"-a", "10.0.0.1:1337", "-r", "60", "-p", "12", "-k", "key", "-l", "10"}
-		cfg, err := createAgentFlagConfig(args)
+		args := []string{"-a", "10.0.0.1:1337", "-r", "60", "-p", "12", "-k", "key", "-l", "10", "-crypto-key", "/keys/public.pem"}
+		cfg, _, _, err := createAgentFlagConfig(args)
 
 		require.NoError(t, err)
 		require.NotNil(t, cfg)
@@ -149,6 +161,7 @@ func TestCreateAgentFlagConfig(t *testing.T) {
 		assert.Equal(t, 12*time.Second, cfg.PollInterval)
 		assert.Equal(t, "key", cfg.Key)
 		assert.Equal(t, 10, cfg.RateLimit)
+		assert.Equal(t, "/keys/public.pem", cfg.CryptoKey)
 	})
 }
 
@@ -159,6 +172,7 @@ func TestCreateAgentEnvConfig(t *testing.T) {
 		t.Setenv("POLL_INTERVAL", "3")
 		t.Setenv("KEY", "env key")
 		t.Setenv("RATE_LIMIT", "10")
+		t.Setenv("CRYPTO_KEY", "/env/public.pem")
 
 		envCfg, err := createAgentEnvConfig()
 		require.NoError(t, err)
@@ -169,6 +183,7 @@ func TestCreateAgentEnvConfig(t *testing.T) {
 		assert.Equal(t, 3, *envCfg.PollInterval)
 		assert.Equal(t, "env key", *envCfg.Key)
 		assert.Equal(t, 10, *envCfg.RateLimit)
+		assert.Equal(t, "/env/public.pem", *envCfg.CryptoKey)
 	})
 
 	t.Run("avoids pointer dereferences on empty environment (returns nils)", func(t *testing.T) {
@@ -177,6 +192,8 @@ func TestCreateAgentEnvConfig(t *testing.T) {
 		t.Setenv("POLL_INTERVAL", "")
 		t.Setenv("KEY", "")
 		t.Setenv("RATE_LIMIT", "")
+		t.Setenv("CRYPTO_KEY", "")
+		t.Setenv("CONFIG", "")
 
 		envCfg, err := createAgentEnvConfig()
 		require.NoError(t, err)
@@ -187,6 +204,8 @@ func TestCreateAgentEnvConfig(t *testing.T) {
 		assert.Nil(t, envCfg.PollInterval)
 		assert.Nil(t, envCfg.Key)
 		assert.Nil(t, envCfg.RateLimit)
+		assert.Nil(t, envCfg.CryptoKey)
+		assert.Nil(t, envCfg.Config)
 	})
 }
 
@@ -201,6 +220,7 @@ func TestMergeAgentConfigs(t *testing.T) {
 			PollInterval:   1 * time.Second,
 			Key:            "key",
 			RateLimit:      10,
+			CryptoKey:      "/keys/public.pem",
 		}
 
 		envCfg := &envAgentConfig{
@@ -209,6 +229,7 @@ func TestMergeAgentConfigs(t *testing.T) {
 			PollInterval:   intPtr(20),
 			Key:            strPtr("env key"),
 			RateLimit:      intPtr(15),
+			CryptoKey:      strPtr(" /env/public.pem "),
 		}
 
 		merged := mergeAgentConfigs(envCfg, flagCfg)
@@ -218,5 +239,6 @@ func TestMergeAgentConfigs(t *testing.T) {
 		assert.Equal(t, 20*time.Second, merged.PollInterval)
 		assert.Equal(t, "env key", merged.Key)
 		assert.Equal(t, 15, merged.RateLimit)
+		assert.Equal(t, "/env/public.pem", merged.CryptoKey, "env value is trimmed")
 	})
 }

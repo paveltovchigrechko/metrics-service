@@ -17,7 +17,8 @@ func TestNewAgent(t *testing.T) {
 	cfg, err := config.SetAgentConfig([]string{})
 	require.NotNil(t, cfg)
 	require.Nil(t, err)
-	a := NewAgent(cfg)
+	a, err := NewAgent(cfg)
+	require.NoError(t, err)
 
 	assert.NotNil(t, a)
 	assert.NotNil(t, a.m)
@@ -39,7 +40,8 @@ func TestSendMetrics(t *testing.T) {
 		cfg, err := config.SetAgentConfig([]string{})
 		require.NotNil(t, cfg)
 		require.Nil(t, err)
-		a := NewAgent(cfg)
+		a, err := NewAgent(cfg)
+		require.NoError(t, err)
 
 		cleanAddr := strings.TrimPrefix(server.URL, "http://")
 		a.cfg.ServerAddress = cleanAddr
@@ -62,7 +64,8 @@ func TestSendMetrics(t *testing.T) {
 		cfg, err := config.SetAgentConfig([]string{})
 		require.NotNil(t, cfg)
 		require.Nil(t, err)
-		a := NewAgent(cfg)
+		a, err := NewAgent(cfg)
+		require.NoError(t, err)
 
 		metric, err := model.CreateMetrics("Alloc", model.Gauge, 0, 1.0)
 		require.NoError(t, err)
@@ -80,7 +83,8 @@ func TestSendMetrics(t *testing.T) {
 		cfg, err := config.SetAgentConfig([]string{})
 		require.NotNil(t, cfg)
 		require.Nil(t, err)
-		a := NewAgent(cfg)
+		a, err := NewAgent(cfg)
+		require.NoError(t, err)
 
 		m1, err := model.CreateMetrics("Alloc", model.Gauge, 0, 1.0)
 		require.NoError(t, err)
@@ -95,7 +99,8 @@ func TestSendMetrics(t *testing.T) {
 		cfg, err := config.SetAgentConfig([]string{})
 		require.NotNil(t, cfg)
 		require.Nil(t, err)
-		a := NewAgent(cfg)
+		a, err := NewAgent(cfg)
+		require.NoError(t, err)
 
 		err = a.sendMetricsURL([]*model.Metrics{})
 		assert.NoError(t, err)
@@ -304,7 +309,8 @@ func TestCreateURLFromMetric(t *testing.T) {
 	require.NotNil(t, cfg)
 	require.Nil(t, err)
 
-	a := NewAgent(cfg)
+	a, err := NewAgent(cfg)
+	require.NoError(t, err)
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {

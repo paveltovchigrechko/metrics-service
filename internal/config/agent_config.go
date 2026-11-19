@@ -15,6 +15,7 @@ type AgentConfig struct {
 	PollInterval   time.Duration
 	Key            string
 	RateLimit      int
+	CryptoKey      string // Path to the PEM file with the server public key. Empty disables encryption.
 }
 
 type envAgentConfig struct {
@@ -23,6 +24,8 @@ type envAgentConfig struct {
 	PollInterval   *int    `env:"POLL_INTERVAL"`
 	Key            *string `env:"KEY"`
 	RateLimit      *int    `env:"RATE_LIMIT"`
+	CryptoKey      *string `env:"CRYPTO_KEY"`
+	Config         *string `env:"CONFIG"`
 }
 
 const (
@@ -31,6 +34,7 @@ const (
 	pollIntervalFlag   = "p"
 	keyFlag            = "k"
 	rateLimitFlag      = "l"
+	cryptoKeyFlag      = "crypto-key"
 
 	defaultServerAddress  = "localhost:8080"
 	defaultReportInterval = 10
@@ -44,14 +48,24 @@ var (
 	errRateLimitNegative = errors.New("rate limit must be positive")
 )
 
+// SetAgentConfig returns the agent configuration for args.
+// The file path comes from -c/-config or CONFIG, and CONFIG wins when both are set.
 func SetAgentConfig(args []string) (*AgentConfig, error) {
 	envCfg, err := createAgentEnvConfig()
 	if err != nil {
 		return nil, err
 	}
 
-	flagCfg, err := createAgentFlagConfig(args)
+	flagCfg, explicit, flagPath, err := createAgentFlagConfig(args)
 	if err != nil {
+		return nil, err
+	}
+
+	var fileCfg fileAgentConfig
+	if err := loadFileConfig(configFilePath(flagPath, envCfg.Config), &fileCfg); err != nil {
+		return nil, err
+	}
+	if err := applyAgentFileConfig(flagCfg, &fileCfg, explicit); err != nil {
 		return nil, err
 	}
 
@@ -96,22 +110,36 @@ func mergeAgentConfigs(envCfg *envAgentConfig, flagCfg *AgentConfig) *AgentConfi
 		flagCfg.RateLimit = *envCfg.RateLimit
 	}
 
+	// Set crypto key path
+	if envCfg.CryptoKey != nil {
+		flagCfg.CryptoKey = strings.TrimSpace(*envCfg.CryptoKey)
+	}
+
 	return flagCfg
 }
 
-// createAgentFlagConfig parses the arguments and returns AgentConfig. The function doesn't validate parsed values.
-func createAgentFlagConfig(args []string) (*AgentConfig, error) {
+// createAgentFlagConfig parses args into an AgentConfig. explicit contains the
+// names of flags present on the command line, and configPath is the -c/-config
+// value. Parsed values are not validated.
+func createAgentFlagConfig(args []string) (cfg *AgentConfig, explicit map[string]bool, configPath string, err error) {
 	fs := flag.NewFlagSet("agent", flag.ContinueOnError)
 	address := fs.String(servAddressFlag, defaultServerAddress, "Metrics server HTTP address")
 	reportSeconds := fs.Int(reportIntervalFlag, defaultReportInterval, "Metrics report frequency (seconds)")
 	pollSeconds := fs.Int(pollIntervalFlag, defaultPollInterval, "Metrics update frequency (seconds)")
 	key := fs.String(keyFlag, defaultKey, "Encrypting key")
 	rateLimit := fs.Int(rateLimitFlag, defaultRateLimit, "Number of concurrent requests")
+	cryptoKey := fs.String(cryptoKeyFlag, "", "Path to the PEM file with the server public key to encrypt metrics")
+	configPathFlag := fs.String(configFlagShort, "", "Path to the JSON configuration file")
+	fs.StringVar(configPathFlag, configFlagLong, "", "Path to the JSON configuration file")
 
-	err := fs.Parse(args)
-	if err != nil {
-		return nil, err
+	if err := fs.Parse(args); err != nil {
+		return nil, nil, "", err
 	}
+
+	explicit = map[string]bool{}
+	fs.Visit(func(f *flag.Flag) {
+		explicit[f.Name] = true
+	})
 
 	reportInterval := time.Duration(*reportSeconds) * time.Second
 	pollInterval := time.Duration(*pollSeconds) * time.Second
@@ -122,7 +150,8 @@ func createAgentFlagConfig(args []string) (*AgentConfig, error) {
 		PollInterval:   pollInterval,
 		Key:            *key,
 		RateLimit:      *rateLimit,
-	}, nil
+		CryptoKey:      strings.TrimSpace(*cryptoKey),
+	}, explicit, strings.TrimSpace(*configPathFlag), nil
 }
 
 // createAgentEnvCongig parses the environment variables, validates string values for empty values, and returns envAgentConfig.

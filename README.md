@@ -42,3 +42,29 @@ git fetch template && git checkout template/v2 .github
 - **Clean Architecture**
 - **Hexagonal Architecture**
 - **Layered Architecture**
+
+## Ключи шифрования
+
+Агент шифрует тело каждого запроса открытым ключом сервера. Сервер расшифровывает его парным закрытым ключом. Пара генерируется скриптом `scripts/gen-keys.sh` (нужен `openssl`):
+
+```bash
+./scripts/gen-keys.sh [private-path] [public-path]
+```
+
+Оба пути необязательны. Без них скрипт создаёт `private.pem` и `public.pem` в текущем каталоге и не перезаписывает уже существующие файлы.
+
+| Файл | Формат PEM | Куда передавать |
+| --- | --- | --- |
+| закрытый ключ | PKCS #8, `BEGIN PRIVATE KEY`, права `0600` | сервер |
+| открытый ключ | PKIX, `BEGIN PUBLIC KEY` | агент |
+
+```bash
+./scripts/gen-keys.sh private.pem public.pem
+
+./server -crypto-key private.pem
+./agent -crypto-key public.pem
+```
+
+Тот же путь задаётся переменной `CRYPTO_KEY` или полем `crypto_key` в JSON-конфиге. Переменная окружения важнее флага, а оба они важнее файла конфигурации. Серверу нужен закрытый ключ, агенту — открытый.
+
+Загрузчики также принимают PKCS #1 (`BEGIN RSA PRIVATE KEY` и `BEGIN RSA PUBLIC KEY`), если ключи уже есть в этом формате. Файлы `*.pem` перечислены в `.gitignore`: закрытый ключ не должен попадать в репозиторий.

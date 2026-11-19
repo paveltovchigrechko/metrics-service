@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"net/http"
 	"net/http/pprof"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/paveltovchigrechko/metrics-service/internal/buildinfo"
 	"github.com/paveltovchigrechko/metrics-service/internal/config"
+	"github.com/paveltovchigrechko/metrics-service/internal/encryption"
 	"github.com/paveltovchigrechko/metrics-service/internal/logger"
 	"github.com/paveltovchigrechko/metrics-service/internal/middleware"
 	"github.com/paveltovchigrechko/metrics-service/internal/server"
@@ -59,6 +61,15 @@ func run() error {
 			middleware.VerifyHashMiddleware(cfg.Key),
 			middleware.SignResponseMiddleware(cfg.Key),
 		)
+	}
+
+	// The agent gzips and then encrypts the body, so decrypt before decompressing.
+	if cfg.CryptoKey != "" {
+		privateKey, err := encryption.LoadPrivateKey(cfg.CryptoKey)
+		if err != nil {
+			return fmt.Errorf("load crypto key: %w", err)
+		}
+		middlewares = append(middlewares, middleware.DecryptMiddleware(privateKey))
 	}
 
 	middlewares = append(middlewares, middleware.GZIPMiddleware)
