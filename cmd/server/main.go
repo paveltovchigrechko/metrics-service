@@ -56,6 +56,14 @@ func run() error {
 		logger.LoggerMiddleware(l),
 	}
 
+	if cfg.TrustedSubnet != "" {
+		trustedSubnet, err := middleware.TrustedSubnetMiddleware(cfg.TrustedSubnet)
+		if err != nil {
+			return err
+		}
+		middlewares = append(middlewares, trustedSubnet)
+	}
+
 	if cfg.Key != "" {
 		middlewares = append(middlewares,
 			middleware.VerifyHashMiddleware(cfg.Key),

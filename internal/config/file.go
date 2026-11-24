@@ -28,15 +28,16 @@ type fileAgentConfig struct {
 
 // fileServerConfig is the server JSON file. Values are Pointers to distinct from an explicit zero value.
 type fileServerConfig struct {
-	Address       *string `json:"address"`        
-	Restore       *bool   `json:"restore"`       
-	StoreInterval *string `json:"store_interval"` 
-	StoreFile     *string `json:"store_file"`     
-	DatabaseDSN   *string `json:"database_dsn"`   
-	Key           *string `json:"key"`            
-	AuditFile     *string `json:"audit_file"`     
-	AuditURL      *string `json:"audit_url"`      
-	CryptoKey     *string `json:"crypto_key"`     
+	Address       *string `json:"address"`
+	Restore       *bool   `json:"restore"`
+	StoreInterval *string `json:"store_interval"`
+	StoreFile     *string `json:"store_file"`
+	DatabaseDSN   *string `json:"database_dsn"`
+	Key           *string `json:"key"`
+	AuditFile     *string `json:"audit_file"`
+	AuditURL      *string `json:"audit_url"`
+	CryptoKey     *string `json:"crypto_key"`
+	TrustedSubnet *string `json:"trusted_subnet"`
 }
 
 // configFilePath returns the JSON file path. CONFIG env variable overrides -c/-config.
@@ -167,6 +168,10 @@ func applyServerFileConfig(cfg *ServerConfig, file *fileServerConfig, explicit m
 
 	if file.CryptoKey != nil && !explicit[cryptoKeyFlag] {
 		cfg.CryptoKey = strings.TrimSpace(*file.CryptoKey)
+	}
+
+	if file.TrustedSubnet != nil && !explicit[trustedSubnetFlag] {
+		cfg.TrustedSubnet = strings.TrimSpace(*file.TrustedSubnet)
 	}
 
 	return nil

@@ -7,10 +7,12 @@ import (
 	"crypto/rsa"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"math"
 	"math/rand"
+	"net"
 	"runtime"
 	"sync"
 	"time"
@@ -28,8 +30,11 @@ const (
 	textPlain       = "text/plain"
 	applicationJSON = "application/json"
 	gzipEncoding    = "gzip"
+	realIPHeader    = "X-Real-IP"
 	reqTimeout      = 5 * time.Second
 )
+
+var errNoHostIP = errors.New("no non-loopback host address found")
 
 type Agent struct {
 	m         *runtime.MemStats
@@ -487,11 +492,43 @@ func (a *Agent) buildMetrics() []model.Metrics {
 	return result
 }
 
+func (a *Agent) hostIP() (string, error) {
+	for _, network := range []string{"udp4", "udp"} {
+		conn, err := net.Dial(network, a.cfg.ServerAddress)
+		if err != nil {
+			continue
+		}
+		addr, ok := conn.LocalAddr().(*net.UDPAddr)
+		conn.Close()
+		if ok {
+			return addr.IP.String(), nil
+		}
+	}
+
+	addrs, err := net.InterfaceAddrs()
+	if err != nil {
+		return "", fmt.Errorf("find host address: %w", err)
+	}
+	for _, addr := range addrs {
+		if ipNet, ok := addr.(*net.IPNet); ok && !ipNet.IP.IsLoopback() {
+			return ipNet.IP.String(), nil
+		}
+	}
+
+	return "", errNoHostIP
+}
+
 func (a *Agent) sendMetricsURL(metrics []*model.Metrics) error {
+	ip, err := a.hostIP()
+	if err != nil {
+		return err
+	}
+
 	for _, m := range metrics {
 		url := a.createURLFromMetric(m)
 		_, err := a.client.R().
 			SetHeader("Content-Type", textPlain).
+			SetHeader(realIPHeader, ip).
 			Post(url)
 		if err != nil {
 			return err
@@ -512,10 +549,16 @@ func (a *Agent) sendMetricsJSON(metrics []model.Metrics, gzipCompressed bool) er
 		return err
 	}
 
+	ip, err := a.hostIP()
+	if err != nil {
+		return err
+	}
+
 	payload := rawJSON
 
 	req := a.client.R().
-		SetHeader("Content-Type", applicationJSON)
+		SetHeader("Content-Type", applicationJSON).
+		SetHeader(realIPHeader, ip)
 
 	if gzipCompressed {
 		compressedBytes, err := gzipCompressJSON(rawJSON)
