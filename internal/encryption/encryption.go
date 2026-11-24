@@ -27,8 +27,8 @@ import (
 )
 
 const (
-	Header = "X-Encryption"
-	Scheme = "rsa-oaep-sha256+aes-256-gcm"
+	Header     = "X-Encryption"
+	Scheme     = "rsa-oaep-sha256+aes-256-gcm"
 	aesKeySize = 32
 )
 

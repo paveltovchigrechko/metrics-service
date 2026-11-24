@@ -3,6 +3,8 @@ package config
 import (
 	"errors"
 	"flag"
+	"fmt"
+	"net"
 	"strings"
 	"time"
 
@@ -19,6 +21,7 @@ const (
 	secretKeyFlag       = "k"
 	auditFilePathFlag   = "audit-file"
 	auditURLFlag        = "audit-url"
+	trustedSubnetFlag   = "t"
 
 	defaultAddress         = "localhost:8080"
 	defaultStoreInterval   = 300
@@ -30,6 +33,7 @@ const (
 var (
 	errEmptyFileStoragePath = errors.New("environment variable for file storage path is an empty string")
 	errEmptyServerAddress   = errors.New("environment variable for server address is an empty string")
+	errInvalidTrustedSubnet = errors.New("trusted subnet is not a valid CIDR")
 )
 
 // ServerConfig holds the server parameters.
@@ -43,6 +47,7 @@ type ServerConfig struct {
 	AuditFilePath   string // File path to store audit logs.
 	AuditURL        string // URL to send audit logs.
 	CryptoKey       string // Path to the PEM file with the private key to decrypt agent requests.
+	TrustedSubnet   string // Classless Inter-Domain Routing (CIDR) of agent addresses allowed to send metrics. Empty means no restriction.
 }
 
 // envServerCongig stores the environment variables. All fields are pointers to distinguish if a value was set.
@@ -56,6 +61,7 @@ type envServerConfig struct {
 	AuditFilePath   *string `env:"AUDIT_FILE"`
 	AuditURL        *string `env:"AUDIT_URL"`
 	CryptoKey       *string `env:"CRYPTO_KEY"`
+	TrustedSubnet   *string `env:"TRUSTED_SUBNET"`
 	Config          *string `env:"CONFIG"`
 }
 
@@ -85,6 +91,13 @@ func SetServerConfig(args []string) (*ServerConfig, error) {
 	// Validate interval, 0 is valid here.
 	if cfg.StoreInterval < 0 {
 		return nil, errIncorrectInterval
+	}
+
+	// Treat empty trusted subnet as error.
+	if cfg.TrustedSubnet != "" {
+		if _, _, err := net.ParseCIDR(cfg.TrustedSubnet); err != nil {
+			return nil, fmt.Errorf("%w: %q", errInvalidTrustedSubnet, cfg.TrustedSubnet)
+		}
 	}
 
 	return cfg, nil
@@ -138,6 +151,11 @@ func mergeServerConfigs(envCfg *envServerConfig, flagCfg *ServerConfig) *ServerC
 		flagCfg.CryptoKey = strings.TrimSpace(*envCfg.CryptoKey)
 	}
 
+	// Set trusted subnet
+	if envCfg.TrustedSubnet != nil {
+		flagCfg.TrustedSubnet = strings.TrimSpace(*envCfg.TrustedSubnet)
+	}
+
 	return flagCfg
 }
 
@@ -156,6 +174,7 @@ func createServerFlagConfig(args []string) (cfg *ServerConfig, explicit map[stri
 	auditFilePath := fs.String(auditFilePathFlag, "", "File path to store audit logs")
 	auditURL := fs.String(auditURLFlag, "", "URL to send audit logs")
 	cryptoKey := fs.String(cryptoKeyFlag, "", "Path to the PEM file with the private key to decrypt agent requests")
+	trustedSubnet := fs.String(trustedSubnetFlag, "", "CIDR of trusted agent addresses (X-Real-IP); empty allows all")
 	configPathFlag := fs.String(configFlagShort, "", "Path to the JSON configuration file")
 	fs.StringVar(configPathFlag, configFlagLong, "", "Path to the JSON configuration file")
 
@@ -169,8 +188,6 @@ func createServerFlagConfig(args []string) (cfg *ServerConfig, explicit map[stri
 	})
 
 	storeInt := time.Duration(*storeInterval) * time.Second
-	cleanedAuditFilePath := strings.TrimSpace(*auditFilePath)
-	cleanedAuditURL := strings.TrimSpace(*auditURL)
 
 	cfg = &ServerConfig{
 		ServerAddress:   *address,
@@ -179,9 +196,10 @@ func createServerFlagConfig(args []string) (cfg *ServerConfig, explicit map[stri
 		Restore:         *restore,
 		DatabaseDSN:     *databaseDSN,
 		Key:             *key,
-		AuditFilePath:   cleanedAuditFilePath,
-		AuditURL:        cleanedAuditURL,
+		AuditFilePath:   strings.TrimSpace(*auditFilePath),
+		AuditURL:        strings.TrimSpace(*auditURL),
 		CryptoKey:       strings.TrimSpace(*cryptoKey),
+		TrustedSubnet:   strings.TrimSpace(*trustedSubnet),
 	}
 
 	return cfg, explicit, strings.TrimSpace(*configPathFlag), nil

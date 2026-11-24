@@ -106,6 +106,7 @@ func TestSetServerConfig_Positive(t *testing.T) {
 			t.Setenv("AUDIT_URL", "")
 			t.Setenv("CRYPTO_KEY", "")
 			t.Setenv("CONFIG", "")
+			t.Setenv("TRUSTED_SUBNET", "")
 
 			for k, v := range tc.envVars {
 				t.Setenv(k, v)
@@ -130,6 +131,7 @@ func TestSetServerConfig_Positive(t *testing.T) {
 
 func TestSetServerConfig_Negative(t *testing.T) {
 	t.Setenv("CONFIG", "")
+	t.Setenv("TRUSTED_SUBNET", "")
 
 	t.Run("returns error when an invalid flag is passed", func(t *testing.T) {
 		cfg, err := SetServerConfig([]string{"-invalid-flag-structure"})
@@ -232,6 +234,7 @@ func TestCreateEnvConfig(t *testing.T) {
 		t.Setenv("AUDIT_URL", "")
 		t.Setenv("CRYPTO_KEY", "")
 		t.Setenv("CONFIG", "")
+		t.Setenv("TRUSTED_SUBNET", "")
 
 		envCfg, err := parseEnvServerConfig()
 

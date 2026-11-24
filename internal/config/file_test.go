@@ -36,6 +36,7 @@ func clearConfigEnv(t *testing.T) {
 		"AUDIT_FILE",
 		"AUDIT_URL",
 		"CRYPTO_KEY",
+		"TRUSTED_SUBNET",
 		"CONFIG",
 	} {
 		t.Setenv(name, "")
